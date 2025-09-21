@@ -3,7 +3,7 @@
 Minimal autoformalization pipeline of simple math proofs from English into Lean 4 (with Mathlib). 
 
 ## Prerequisites
-- [Lean 4 toolchain](https://leanprover-community.github.io/get_started.html) (Lake 5+, compatible with `leanprover/lean4:v4.12.0`).
+- [Lean 4 toolchain](https://leanprover-community.github.io/get_started.html) (Lake 5+, compatible with `leanprover/lean4:v4.18.0`).
 - [`uv`](https://github.com/astral-sh/uv) ≥ 0.8 for Python dependency management.
 
 ## Lean environment
