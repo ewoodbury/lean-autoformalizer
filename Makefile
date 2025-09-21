@@ -83,9 +83,9 @@ format-check: ## Check if Python code is properly formatted
 	@uv run ruff format --check $(PYTHON_SRC) $(TESTS_DIR)
 	@echo "$(GREEN)✓ Format check passed$(RESET)"
 
-type-check: ## Run mypy type checking
+type-check: ## Run pyrefly type checking
 	@echo "$(CYAN)Running type checking...$(RESET)"
-	@uv run mypy $(PYTHON_SRC)
+	@uv run pyrefly check $(PYTHON_SRC)
 	@echo "$(GREEN)✓ Type checking passed$(RESET)"
 
 check-all: lint format-check type-check check-lean ## Run all code quality checks

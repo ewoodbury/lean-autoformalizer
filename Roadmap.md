@@ -43,12 +43,13 @@ Build a small, verifiable system that converts short, structured English proofs 
 
 ### Phase 0 - Environment and Scaffolding (1-2 days)
 **Requirements**
-- [ ] Lean 4 and mathlib installed; non-interactive compile with a script.
-- [ ] Python environment with pinned versions; GPU optional (small model acceptable).
-- [ ] Project skeleton, logging, and config.
+- [x] Lean 4 and mathlib installed; non-interactive compile with a script.
+- [x] Python environment with pinned versions; GPU optional (small model acceptable).
+- [x] Project skeleton, logging, and config.
+- [ ] Github Actions CI checks (lint/format/types, regular tests)
 
 **Exit Criteria**
-- `lean --make` works on a sample `.lean` file.
+- `lake env lean` works on a sample `.lean` file.
 - `executor.run_proof(lean_code)` returns `(compiled: bool, stderr: str)`.
 
 ### Phase 1 - Data: Narrow, Clean, Verifiable (2-3 days)
@@ -145,7 +146,7 @@ Build a small, verifiable system that converts short, structured English proofs 
   - `autoformalize file.jsonl --out out/ --k 10 --max-retries 5`
   - `evaluate out/ --split test --report reports/run_YYYYMMDD.json`
 - Dockerfile with Lean and Python dependencies.
-- GitHub CI: lint, mypy, black, and a tiny smoke test (3 examples) on PR.
+- GitHub CI: lint, pyrefly, black, and a tiny smoke test (3 examples) on PR.
 
 **Exit Criteria**
 - Fresh clone + `make run-small` produces a success report.
