@@ -1,0 +1,21 @@
+# Python
+.venv/
+.pytest_cache/
+.mypy_cache/
+__pycache__/
+uv.lock.bak
+.uv-cache/
+.ruff-cache/
+
+# Lean
+lake-packages/
+lake-manifest.json
+build/
+.lake/
+
+# Misc
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

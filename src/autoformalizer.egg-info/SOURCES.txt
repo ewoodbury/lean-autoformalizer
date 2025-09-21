@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/autoformalizer/__init__.py
+src/autoformalizer/cli.py
+src/autoformalizer/executor.py
+src/autoformalizer.egg-info/PKG-INFO
+src/autoformalizer.egg-info/SOURCES.txt
+src/autoformalizer.egg-info/dependency_links.txt
+src/autoformalizer.egg-info/entry_points.txt
+src/autoformalizer.egg-info/requires.txt
+src/autoformalizer.egg-info/top_level.txt
+tests/test_executor.py
