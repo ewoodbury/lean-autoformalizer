@@ -9,10 +9,12 @@ Minimal autoformalization pipeline of simple math proofs from English into Lean 
 ## Lean environment
 ```bash
 # Fetch mathlib and build the sample project targets
-lake update
-./scripts/check_lean.sh
+make build-lean
+
+# Or run the helper script to confirm the environment is functional
+make check-lean
 ```
-The helper script runs `lean --make Autoformalizer/Basic.lean` followed by `lake build` to confirm that mathlib is available and the scaffolding compiles.
+The helper script runs `lake build Autoformalizer.Basic` followed by `lake build` to confirm that mathlib is available and the scaffolding compiles.
 
 ## Python environment
 ```bash
@@ -48,8 +50,8 @@ This wraps `run_proof` so Phase 0 can be driven from the command line.
 ## Linting & formatting
 `ruff` is configured as the single source of truth for linting and formatting. Use:
 ```bash
-uv run --python 3.11 --group dev ruff check
-uv run --python 3.11 --group dev ruff format
+make lint
+make format
 ```
 
 ## Next steps
