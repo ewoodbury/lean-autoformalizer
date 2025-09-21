@@ -63,7 +63,7 @@ def compile_lean_snippet(
         tmp_path = Path(tmpdir) / f"{module_name}.lean"
         tmp_path.write_text(rendered, encoding="utf-8")
         LOG.debug("Compiling Lean snippet saved to %s", tmp_path)
-        cmd = [_lake_executable(), "env", "lean", "--make", str(tmp_path)]
+        cmd = [_lake_executable(), "env", "lean", str(tmp_path)]
         proc = subprocess.run(  # noqa: S603
             cmd,
             cwd=PROJECT_ROOT,
