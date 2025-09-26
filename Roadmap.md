@@ -46,7 +46,7 @@ Build a small, verifiable system that converts short, structured English proofs 
 - [x] Lean 4 and mathlib installed; non-interactive compile with a script.
 - [x] Python environment with pinned versions; GPU optional (small model acceptable).
 - [x] Project skeleton, logging, and config.
-- [ ] Github Actions CI checks (lint/format/types, regular tests)
+- [x] Github Actions CI checks (lint/format/types, regular tests)
 
 **Exit Criteria**
 - `lake env lean` works on a sample `.lean` file.

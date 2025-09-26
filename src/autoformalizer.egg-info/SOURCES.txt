@@ -9,4 +9,7 @@ src/autoformalizer.egg-info/dependency_links.txt
 src/autoformalizer.egg-info/entry_points.txt
 src/autoformalizer.egg-info/requires.txt
 src/autoformalizer.egg-info/top_level.txt
+src/autoformalizer/datasets/__init__.py
+src/autoformalizer/datasets/loader.py
+src/autoformalizer/datasets/schemas.py
 tests/test_executor.py
