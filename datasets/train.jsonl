@@ -31,3 +31,9 @@
 
 
 
+
+
+{"id": "prop_and_left_comm", "topic": "logic.prop", "english": {"statement": "For propositions P, Q, and R, (P \u2227 Q) \u2227 R is equivalent to (Q \u2227 P) \u2227 R.", "steps": ["We reorganize the conjunctions by swapping the first two components."]}, "lean": {"imports": [], "theorem": "theorem prop_and_left_comm (P Q R : Prop) : (P \u2227 Q) \u2227 R \u2194 (Q \u2227 P) \u2227 R :=\n  by\n    constructor\n    \u00b7 intro h\n      rcases h with \u27e8hPQ, hR\u27e9\n      rcases hPQ with \u27e8hP, hQ\u27e9\n      exact \u27e8\u27e8hQ, hP\u27e9, hR\u27e9\n    \u00b7 intro h\n      rcases h with \u27e8hQP, hR\u27e9\n      rcases hQP with \u27e8hQ, hP\u27e9\n      exact \u27e8\u27e8hP, hQ\u27e9, hR\u27e9"}}
+
+For propositions P, Q, and R, (P \u2227 Q) \u2227 R is equivalent to (Q \u2227 P) \u2227 R.
+We reorganize the conjunctions by swapping the first two components.

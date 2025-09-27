@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 
 from .datasets import DatasetLoader, DatasetValidator
+from .decode import OpenRouterClient, generate_lean_proof
+from .decode.decode import ENGLISH_TO_LEAN_PROMPT
 from .executor import run_proof
 
 app = typer.Typer(help="Utilities for working with Lean autoformalization experiments.")
@@ -198,7 +201,10 @@ def create_splits(
             loader.save_items(split_data.items, output_path)
 
             typer.secho(
-                f"Success: {split_name.capitalize()}: {len(split_data.items)} items → {output_path}",
+                (
+                    "Success: "
+                    f"{split_name.capitalize()}: {len(split_data.items)} items → {output_path}"
+                ),
                 fg=typer.colors.GREEN,
             )
 
@@ -288,6 +294,139 @@ def inspect_dataset(
     except Exception as e:
         typer.secho(f"Dataset inspection failed: {e}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from e
+
+
+@app.command()
+def decode(
+    statement: Annotated[
+        str,
+        typer.Option(
+            "--statement",
+            "-q",
+            prompt=True,
+            help="English statement to formalize.",
+        ),
+    ],
+    steps: Annotated[
+        str | None,
+        typer.Option(
+            "--step",
+            "-s",
+            help="Optional semicolon-separated proof steps to guide the model.",
+            show_default=False,
+        ),
+    ] = None,
+    model: Annotated[
+        str,
+        typer.Option("--model", help="OpenRouter model identifier."),
+    ] = "x-ai/grok-4-fast",
+    max_tokens: Annotated[
+        int,
+        typer.Option("--max-tokens", help="Maximum tokens to request from the model."),
+    ] = 512,
+    temperature: Annotated[
+        float,
+        typer.Option(
+            "--temperature",
+            help="Sampling temperature passed to the model.",
+            min=0.0,
+            max=2.0,
+        ),
+    ] = 0.7,
+    api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key",
+            help="OpenRouter API key. Falls back to the OPENROUTER_API_KEY environment variable.",
+            envvar="OPENROUTER_API_KEY",
+            show_envvar=True,
+        ),
+    ] = None,
+    prompt_file: Annotated[
+        Path | None,
+        typer.Option("--prompt-file", "-p", help="Path to a custom prompt template."),
+    ] = None,
+    show_prompt: Annotated[
+        bool,
+        typer.Option("--show-prompt", help="Print the prompt that will be sent to the model."),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional path to save the generated Lean code."),
+    ] = None,
+) -> None:
+    """Generate Lean code from an English statement via OpenRouter."""
+
+    english_steps: list[str] = []
+    if steps:
+        english_steps = [part.strip() for part in steps.split(";") if part.strip()]
+    english_content: dict[str, Any] = {"statement": statement}
+    if english_steps:
+        english_content["steps"] = english_steps
+
+    english_item = {"english": english_content}
+
+    prompt_text: str
+    if prompt_file:
+        try:
+            prompt_text = prompt_file.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            typer.secho(f"Failed to read prompt file: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1) from exc
+        if not prompt_text:
+            typer.secho("Prompt file is empty.", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1)
+    else:
+        step_str = ", ".join(english_steps) if english_steps else "No specific steps provided"
+        prompt_text = ENGLISH_TO_LEAN_PROMPT.format(statement=statement, steps=step_str)
+
+    if show_prompt:
+        typer.secho("\n=== Prompt ===", fg=typer.colors.BLUE, bold=True)
+        typer.echo(prompt_text)
+
+    try:
+        with OpenRouterClient(api_key=api_key, model=model) as client:
+            candidate = generate_lean_proof(
+                english_item,
+                client,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                prompt=prompt_text,
+            )
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except RuntimeError as exc:
+        typer.secho(f"Model generation failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.secho("\n=== Lean Candidate ===", fg=typer.colors.BLUE, bold=True)
+    if candidate.code:
+        typer.echo(candidate.code)
+    else:
+        typer.secho("[No code returned by the model]", fg=typer.colors.YELLOW)
+
+    status_fg = typer.colors.GREEN if candidate.is_valid else typer.colors.RED
+    status_icon = "✅" if candidate.is_valid else "❌"
+    typer.secho(
+        f"\nValidation: {status_icon} ({candidate.generation_time:.2f}s)",
+        fg=status_fg,
+        bold=True,
+    )
+
+    if candidate.errors:
+        typer.secho("Issues detected:", fg=typer.colors.YELLOW)
+        for error in candidate.errors:
+            typer.echo(f"  - {error}")
+
+    if output:
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(candidate.code, encoding="utf-8")
+            typer.secho(f"\nSaved generated Lean code to: {output}", fg=typer.colors.GREEN)
+        except OSError as exc:
+            typer.secho(f"Failed to write output file: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1) from exc
 
 
 if __name__ == "__main__":

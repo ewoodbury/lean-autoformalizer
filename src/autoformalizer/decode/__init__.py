@@ -13,10 +13,12 @@ from .decode import (
     generate_lean_proof,
     validate_lean_code,
 )
+from .openrouter import OpenRouterClient
 
 __all__ = [
     "CandidateLean",
     "ModelClient",
+    "OpenRouterClient",
     "extract_lean_code",
     "generate_batch",
     "generate_lean_proof",

@@ -47,6 +47,29 @@ uv run autoformalize check Autoformalizer/Basic.lean
 ```
 This wraps `run_proof` so Phase 0 can be driven from the command line.
 
+### Talking to an LLM (OpenRouter)
+
+Set your OpenRouter key in the environment and invoke the new `decode` command to translate
+English statements into Lean code through `x-ai/grok-4-fast`:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+uv run autoformalize decode \
+  --statement "For all natural numbers n, n + 0 = n" \
+  --step "Use Nat.add_zero"
+```
+
+Flags you may find useful:
+
+- `--model`: override the OpenRouter model (defaults to `x-ai/grok-4-fast`).
+- `--max-tokens` / `--temperature`: control sampling parameters.
+- `--show-prompt`: print the exact prompt sent to the model.
+- `--output`: save the generated Lean snippet to a file.
+- `--step`: optionally provide one or more proof hints (separate multiple steps with `;`).
+
+The command validates the returned code with lightweight structural checks before printing the
+result, so you immediately learn whether the snippet is syntactically plausible.
+
 ## Linting & formatting
 `ruff` is configured as the single source of truth for linting and formatting. Use:
 ```bash
