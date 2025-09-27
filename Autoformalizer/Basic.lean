@@ -1,3 +1,9 @@
+-- Basic imports for autoformalizer proofs
+import Mathlib.Data.Set.Basic
+import Mathlib.Data.List.Basic
+import Mathlib.Data.Bool.Basic
+import Mathlib.Logic.Function.Basic
+
 namespace Autoformalizer
 
 /-- Example lemma used to verify the Lean environment builds successfully. -/

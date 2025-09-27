@@ -54,9 +54,9 @@ Build a small, verifiable system that converts short, structured English proofs 
 
 ### Phase 1 - Data: Narrow, Clean, Verifiable (2-3 days)
 **Scope**
-- [ ] Curate 100-200 short lemmas with existing Lean proofs.
-- [ ] Write structured English versions: 1-3 sentence statements plus enumerated steps.
-- [ ] Limit to a small vocabulary and template patterns.
+- [x] Curate 100-200 short lemmas with existing Lean proofs.
+- [x] Write structured English versions: 1-3 sentence statements plus enumerated steps.
+- [x] Limit to a small vocabulary and template patterns.
 
 **Format (JSONL)**
 ```json
@@ -76,7 +76,7 @@ Build a small, verifiable system that converts short, structured English proofs 
 ```
 
 **Exit Criteria**
-- `datasets/mini.jsonl` with train/dev/test = 60/20/20.
+- `datasets/train.jsonl`, `datasets/dev.jsonl`, and `datasets/test.jsonl` with counts 60/20/20.
 - Lint: no duplicates; all Lean references compile.
 
 ### Phase 2 - Prompting and Constrained Decoding (2-4 days)

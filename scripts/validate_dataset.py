@@ -14,45 +14,102 @@ from autoformalizer.datasets import DatasetLoader, DatasetValidator
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    dataset_path = Path(__file__).parent.parent / "datasets" / "mini.jsonl"
-    loader = DatasetLoader(dataset_path)
+    # Define all dataset files to validate
+    datasets_dir = Path(__file__).parent.parent / "datasets"
+    dataset_files = ["train.jsonl", "dev.jsonl", "test.jsonl", "mini.jsonl"]
+
     validator = DatasetValidator()
+    all_items = []
+    overall_success = True
 
-    # Load items
-    try:
-        items = loader.load_items()
-        print(f"✓ Loaded {len(items)} items successfully")
-    except Exception as e:
-        print(f"✗ Failed to load items: {e}")
-        return 1
+    print("=== Validating All Dataset Files ===\n")
 
-    # Validate dataset
-    try:
-        results = validator.validate_dataset(items, check_compilation=True)
+    # Validate each dataset file individually
+    for dataset_file in dataset_files:
+        dataset_path = datasets_dir / dataset_file
+        if not dataset_path.exists():
+            print(f"⚠️  Skipping {dataset_file} (file not found)")
+            continue
 
-        print("\n=== Validation Results ===")
-        print(f"Total items: {results['total_items']}")
-        print(f"Topics: {list(results['topics'].keys())}")
-        print(f"Duplicate IDs: {len(results['duplicates']['duplicate_ids'])}")
-        print(f"Duplicate Lean items: {len(results['duplicates']['duplicate_lean_items'])}")
+        print(f"--- Validating {dataset_file} ---")
+        loader = DatasetLoader(dataset_path)
 
-        if "compilation" in results:
-            comp = results["compilation"]
-            print(f"Compilation success rate: {comp['success_rate']:.2%}")
-            print(f"Successful: {comp['successful']}/{comp['total_checked']}")
+        # Load items
+        try:
+            items = loader.load_items()
+            print(f"✓ Loaded {len(items)} items from {dataset_file}")
+            all_items.extend(items)
+        except Exception as e:
+            print(f"✗ Failed to load items from {dataset_file}: {e}")
+            overall_success = False
+            continue
 
-            # Show any failures
-            failed_items = [r for r in comp["results"] if not r["ok"]]
-            if failed_items:
-                print("\n=== Compilation Failures ===")
-                for item in failed_items:
-                    print(f"- {item['id']}: {item['stderr']}")
+        # Validate this dataset file
+        try:
+            results = validator.validate_dataset(items, check_compilation=True)
 
-        return 0 if results.get("compilation", {}).get("success_rate", 1.0) == 1.0 else 1
+            print(f"  Total items: {results['total_items']}")
+            topics_str = ", ".join(sorted(results["topics"].keys()))
+            print(f"  Topics: {len(results['topics'])} ({topics_str})")
+            print(f"  Duplicate IDs within file: {len(results['duplicates']['duplicate_ids'])}")
+            duplicate_lean_count = len(results["duplicates"]["duplicate_lean_items"])
+            print(f"  Duplicate Lean items within file: {duplicate_lean_count}")
 
-    except Exception as e:
-        print(f"✗ Validation failed: {e}")
-        return 1
+            if "compilation" in results:
+                comp = results["compilation"]
+                success_info = f"{comp['successful']}/{comp['total_checked']}"
+                print(f"  Compilation success rate: {comp['success_rate']:.2%} ({success_info})")
+
+                # Show any failures
+                failed_items = [r for r in comp["results"] if not r["ok"]]
+                if failed_items:
+                    print("  ⚠️  Compilation failures:")
+                    for item in failed_items:
+                        print(f"    - {item['id']}: {item['stderr']}")
+                    overall_success = False
+            print()
+
+        except Exception as e:
+            print(f"✗ Validation failed for {dataset_file}: {e}")
+            overall_success = False
+            print()
+
+    # Validate across all datasets for global duplicates
+    if all_items:
+        print("--- Cross-Dataset Validation ---")
+        try:
+            global_results = validator.validate_dataset(all_items, check_compilation=False)
+
+            print(f"✓ Total items across all datasets: {global_results['total_items']}")
+            all_topics_str = ", ".join(sorted(global_results["topics"].keys()))
+            topic_count = len(global_results["topics"])
+            print(f"✓ Unique topics across all datasets: {topic_count} ({all_topics_str})")
+
+            # Check for duplicates across all datasets
+            global_duplicate_ids = global_results["duplicates"]["duplicate_ids"]
+            global_duplicate_lean = global_results["duplicates"]["duplicate_lean_items"]
+
+            if global_duplicate_ids:
+                print(f"⚠️  Duplicate IDs across all datasets: {len(global_duplicate_ids)}")
+                for dup_id in global_duplicate_ids:
+                    print(f"    - {dup_id}")
+                overall_success = False
+            else:
+                print("✓ No duplicate IDs across all datasets")
+
+            if global_duplicate_lean:
+                duplicate_count = len(global_duplicate_lean)
+                print(f"⚠️  Duplicate Lean theorems across all datasets: {duplicate_count}")
+                overall_success = False
+            else:
+                print("✓ No duplicate Lean theorems across all datasets")
+
+        except Exception as e:
+            print(f"✗ Cross-dataset validation failed: {e}")
+            overall_success = False
+
+    print(f"\n=== Overall Result: {'✓ PASS' if overall_success else '✗ FAIL'} ===")
+    return 0 if overall_success else 1
 
 
 if __name__ == "__main__":

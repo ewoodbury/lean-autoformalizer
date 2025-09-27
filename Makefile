@@ -97,6 +97,11 @@ test: ## Run Python tests with pytest
 	@uv run pytest $(TESTS_DIR) -v
 	@echo "$(GREEN)✓ Tests completed$(RESET)"
 
+test-validate-proofs: ## Run tests that validate generated proofs
+	@echo "$(CYAN)Running proof validation tests...$(RESET)"
+	@uv run scripts/validate_dataset.py
+	@echo "$(GREEN)✓ Proof validation tests completed$(RESET)"
+
 test-watch: ## Run tests in watch mode
 	@echo "$(CYAN)Running tests in watch mode...$(RESET)"
 	@uv run pytest-watch $(TESTS_DIR) --verbose
