@@ -50,4 +50,4 @@ def test_decode_cli_success(monkeypatch):
 
     assert result.exit_code == 0, result.stdout
     assert "theorem test_cli" in result.stdout
-    assert "Validation: ✅" in result.stdout
+    assert "Validation: Success!" in result.stdout

@@ -10,6 +10,53 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+_ALLOWED_UNICODE_CODEPOINTS = [
+    "2227",  # U+2227 logical and
+    "2228",  # U+2228 logical or
+    "21D4",  # U+21D4 logical equivalence
+    "2194",  # U+2194 double arrow (leftright)
+    "2192",  # U+2192 implication arrow
+    "00AC",  # U+00AC logical not
+    "2264",  # U+2264 less-than or equal
+    "2265",  # U+2265 greater-than or equal
+    "2200",  # U+2200 universal quantifier
+    "2203",  # U+2203 existential quantifier
+    "2115",  # U+2115 double-struck capital N
+    "2124",  # U+2124 double-struck capital Z
+    "211D",  # U+211D double-struck capital R
+    "211A",  # U+211A double-struck capital Q
+    "2102",  # U+2102 double-struck capital C
+    "03B1",  # U+03B1 greek small letter alpha
+    "03B2",  # U+03B2 greek small letter beta
+    "03B3",  # U+03B3 greek small letter gamma
+    "03B4",  # U+03B4 greek small letter delta
+    "03B5",  # U+03B5 greek small letter epsilon
+    "03B8",  # U+03B8 greek small letter theta
+    "03BB",  # U+03BB greek small letter lambda
+    "03BC",  # U+03BC greek small letter mu
+    "03C0",  # U+03C0 greek small letter pi
+    "03C3",  # U+03C3 greek small letter sigma
+    "03C4",  # U+03C4 greek small letter tau
+    "03C6",  # U+03C6 greek small letter phi
+    "03C8",  # U+03C8 greek small letter psi
+    "03C9",  # U+03C9 greek small letter omega
+    "2208",  # U+2208 element of
+    "2286",  # U+2286 subset or equal
+    "2282",  # U+2282 proper subset
+    "2287",  # U+2287 superset or equal
+    "2283",  # U+2283 proper superset
+    "2260",  # U+2260 not equal
+    "22C5",  # U+22C5 dot operator
+    "00B7",  # U+00B7 middle dot
+    "2218",  # U+2218 ring operator
+    "2211",  # U+2211 summation operator
+    "220F",  # U+220F product operator
+    "22A4",  # U+22A4 top
+    "22A5",  # U+22A5 bottom
+]
+
+ALLOWED_UNICODE_CHARS = {chr(int(codepoint, 16)) for codepoint in _ALLOWED_UNICODE_CODEPOINTS}
+
 
 class ModelClient(Protocol):
     """Protocol for LLM model clients."""
@@ -30,32 +77,26 @@ class CandidateLean:
 
 
 # Prompt template for converting English to Lean
-ENGLISH_TO_LEAN_PROMPT = """Given this mathematical statement in English, generate a complete Lean 4 theorem:
-
-English: {statement}
-Steps: {steps}
-
-Generate the complete Lean theorem including imports and proof. 
-Use tactic mode with 'by' and keep it concise.
-
-Example:
-English: "For all natural numbers a and b, a + b = b + a"
-Steps: ["Use commutativity of addition on naturals"]
-
-Lean:
-```lean
-import Mathlib/Data/Nat/Basic
-
-theorem add_comm_nat (a b : Nat) : a + b = b + a := by
-  rw [Nat.add_comm]
-```
-
-Your turn:
-English: {statement}
-Steps: {steps}
-
-Lean:
-"""
+ENGLISH_TO_LEAN_PROMPT = (
+    "Given this mathematical statement in English, generate a complete Lean 4 theorem:\n\n"
+    "English: {statement}\n"
+    "Steps: {steps}\n\n"
+    "Generate the complete Lean theorem including imports and proof.\n"
+    "Use tactic mode with 'by' and keep it concise.\n\n"
+    "Example:\n"
+    'English: "For all natural numbers a and b, a + b = b + a"\n'
+    'Steps: ["Use commutativity of addition on naturals"]\n\n'
+    "Lean:\n"
+    "```lean\n"
+    "import Mathlib/Data/Nat/Basic\n\n"
+    "theorem add_comm_nat (a b : Nat) : a + b = b + a := by\n"
+    "  rw [Nat.add_comm]\n"
+    "```\n\n"
+    "Your turn:\n"
+    "English: {statement}\n"
+    "Steps: {steps}\n\n"
+    "Lean:\n"
+)
 
 
 def validate_lean_code(code: str) -> tuple[bool, list[str]]:
@@ -86,11 +127,10 @@ def validate_lean_code(code: str) -> tuple[bool, list[str]]:
         errors.append("No proof body found")
 
     # Check for common syntax issues
-    if re.search(r"[^\x00-\x7F]", code):
-        # Allow some unicode in comments and strings, but flag suspicious characters
-        suspicious_chars = re.findall(r"[^\x00-\x7F\s]", code)
-        if suspicious_chars:
-            errors.append(f"Potentially problematic unicode characters: {set(suspicious_chars)}")
+    unicode_chars = set(re.findall(r"[^\x00-\x7F\s]", code))
+    suspicious_chars = {char for char in unicode_chars if char not in ALLOWED_UNICODE_CHARS}
+    if suspicious_chars:
+        errors.append(f"Potentially problematic unicode characters: {suspicious_chars}")
 
     # Check for unterminated strings or comments
     if code.count('"') % 2 != 0:

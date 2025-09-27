@@ -103,6 +103,18 @@ class TestValidateLeanCode:
         assert not is_valid
         assert len(errors) >= 2  # Should catch multiple issues
 
+    def test_allows_common_unicode_symbols(self):
+        """Unicode symbols commonly used in Lean proofs should be accepted."""
+        unicode_code = (
+            "theorem unicode_theorem (P Q R : Prop) : ((P ∧ Q) ∧ R) ↔ ((Q ∧ P) ∧ R) := by\n"
+            "  intro h\n"
+            "  simpa using h"
+        )
+
+        is_valid, errors = validate_lean_code(unicode_code)
+        assert is_valid
+        assert not errors
+
 
 class TestExtractLeanCode:
     """Test suite for Lean code extraction from LLM responses."""

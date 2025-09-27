@@ -37,3 +37,5 @@
 
 For propositions P, Q, and R, (P \u2227 Q) \u2227 R is equivalent to (Q \u2227 P) \u2227 R.
 We reorganize the conjunctions by swapping the first two components.
+
+For propositions P, Q, and R, (P ∧ Q) ∧ R is equivalent to (Q ∧ P) ∧ R.
