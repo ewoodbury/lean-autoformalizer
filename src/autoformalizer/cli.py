@@ -308,14 +308,17 @@ def decode(
         ),
     ],
     steps: Annotated[
-        str | None,
+        str,
         typer.Option(
             "--step",
             "-s",
+            prompt=(
+                "Proof steps (optional, separate multiple entries with ';'). Leave blank to skip"
+            ),
             help="Optional semicolon-separated proof steps to guide the model.",
             show_default=False,
         ),
-    ] = None,
+    ] = "",
     model: Annotated[
         str,
         typer.Option("--model", help="OpenRouter model identifier."),
@@ -407,9 +410,9 @@ def decode(
         typer.secho("[No code returned by the model]", fg=typer.colors.YELLOW)
 
     status_fg = typer.colors.GREEN if candidate.is_valid else typer.colors.RED
-    status_icon = "✅" if candidate.is_valid else "❌"
+    status_message = "Success!" if candidate.is_valid else "Failure..."
     typer.secho(
-        f"\nValidation: {status_icon} ({candidate.generation_time:.2f}s)",
+        f"\nValidation: {status_message} ({candidate.generation_time:.2f}s)",
         fg=status_fg,
         bold=True,
     )

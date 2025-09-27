@@ -59,6 +59,14 @@ uv run autoformalize decode \
   --step "Use Nat.add_zero"
 ```
 
+Run it fully interactively (no flags) via either command:
+
+```bash
+uv run autoformalize decode
+# or
+make decode
+```
+
 Flags you may find useful:
 
 - `--model`: override the OpenRouter model (defaults to `x-ai/grok-4-fast`).

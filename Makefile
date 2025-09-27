@@ -116,6 +116,10 @@ run-cli: ## Run the autoformalizer CLI (pass args with ARGS="...")
 	@echo "$(CYAN)Running autoformalizer CLI...$(RESET)"
 	@uv run autoformalize $(ARGS)
 
+decode: ## Interactively generate Lean code from an English statement
+	@echo "$(CYAN)Starting interactive decoder...$(RESET)"
+	@uv run autoformalize decode
+
 run-lean-exe: ## Run the Lean executable
 	@echo "$(CYAN)Running Lean executable...$(RESET)"
 	@lake exe autoformalizer $(ARGS)
