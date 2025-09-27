@@ -114,6 +114,9 @@ class TestBeamSearchExecutor:
 
         # Check that generate_lean_proof was called correctly
         assert mock_generate.call_count == 2
+        first_call = mock_generate.call_args_list[0]
+        assert "prompt" in first_call.kwargs
+        assert "True is true" in first_call.kwargs["prompt"]
 
     @patch("autoformalizer.executor.beam.generate_lean_proof")
     def test_generate_candidates_with_error_context(self, mock_generate):
@@ -135,6 +138,12 @@ class TestBeamSearchExecutor:
 
         assert len(candidates) == 2  # beam_schedule[1] = 2 for attempt 2
         assert mock_generate.call_count == 2
+
+        # Repair attempts should pass the specialized prompt through
+        first_call = mock_generate.call_args_list[0]
+        assert "prompt" in first_call.kwargs
+        assert "Convert this to Lean 4" not in first_call.kwargs["prompt"]
+        assert "tactic" in first_call.kwargs["prompt"].lower()
 
     @patch("autoformalizer.executor.beam.generate_lean_proof")
     def test_generate_candidates_with_cache_hit(self, mock_generate):

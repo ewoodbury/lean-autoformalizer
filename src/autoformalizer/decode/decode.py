@@ -142,6 +142,8 @@ def generate_lean_proof(
     model_client: ModelClient,
     max_tokens: int = 512,
     temperature: float = 0.7,
+    *,
+    prompt: str | None = None,
 ) -> CandidateLean:
     """
     Generate a single Lean proof from English input.
@@ -158,14 +160,15 @@ def generate_lean_proof(
     start_time = time.time()
 
     try:
-        # Extract English content
-        english_content = english_item["english"]
-        statement = english_content["statement"]
-        steps = english_content.get("steps", [])
+        # Extract English content when no custom prompt is provided
+        if prompt is None:
+            english_content = english_item["english"]
+            statement = english_content["statement"]
+            steps = english_content.get("steps", [])
 
-        # Format prompt
-        steps_str = ", ".join(steps) if steps else "No specific steps provided"
-        prompt = ENGLISH_TO_LEAN_PROMPT.format(statement=statement, steps=steps_str)
+            # Format prompt
+            steps_str = ", ".join(steps) if steps else "No specific steps provided"
+            prompt = ENGLISH_TO_LEAN_PROMPT.format(statement=statement, steps=steps_str)
 
         # Generate code
         response = model_client.generate(prompt, max_tokens=max_tokens, temperature=temperature)

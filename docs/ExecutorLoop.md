@@ -7,17 +7,17 @@ The Executor Loop is the core engine of the lean-autoformalizer, transforming it
 ## 2. Key Capabilities
 
 ### Core Features
-- Intelligent Error Handling: Parses Lean compiler errors and maps them to actionable error categories with targeted repair strategies
-- Iterative Refinement: Implements adaptive retry loops with specialized repair prompts for each error type
-- Performance Optimization: Multi-level caching and beam search strategies to maximize success rates and minimize redundant computation  
-- End-to-End Integration: Complete autoformalization pipeline from English input to compiled Lean proof with comprehensive logging
+- Error Classification: Parses Lean compiler stderr into five regex-backed categories and surfaces suggested fixes plus repair prompts
+- Iterative Refinement: Configurable retry loop with beam/temperature schedules that now feed category-specific prompts into regeneration
+- Practical Caching: Compilation results are cached to avoid recompilation; generation caching is available but still gathering data on hit rates  
+- End-to-End Integration: Autoformalization returns detailed attempt logs, cached stats, and success flags consumable by demos and tests
 
 ### System Characteristics
-- Modular Design: Clean separation of concerns across 5 specialized modules
-- Robust Error Recovery: Comprehensive error taxonomy covering 5 major categories of Lean compilation failures
-- Adaptive Retry Policy: Configurable beam search with increasing exploration across attempts
-- Multi-Level Caching: Compilation, generation, and validation caches with LRU eviction
-- Comprehensive Logging: Detailed execution traces for debugging and evaluation
+- Modular Design: Separation across decoding, caching, error parsing, retry policy, and orchestration modules
+- Error-Aware Retries: Repair prompts are constructed per category and passed into regeneration attempts after a failure
+- Adaptive Retry Policy: Beam sizes and temperatures are scheduled per attempt with early exit on success
+- Lightweight Caching: Compilation cache is in active use; generation/validation caches exist but are considered experimental until more telemetry is collected
+- Detailed Logging: Generation attempts capture per-attempt parameters, candidate metadata, and aggregated cache stats
 
 ## 3. Architecture Components
 
@@ -268,118 +268,23 @@ Fix the syntax error:
 }
 ```
 
-## 5. Testing and Validation
+## 5. Validation Status
 
-### 5.1 Test Coverage
+- **Unit coverage**: `tests/executor` (83 tests) exercise retry policies, caching behaviour, result serialization, and the convenience wrapper. `tests/decode` (36 tests) cover prompt construction, candidate validation, and error handling in the decoder. Error classification and cache utilities each have focused suites.
+- **Integration coverage**: Current integration tests rely on mocked model and compilation layers (`TestExecutorIntegration` / `demo_phase3.py`) to simulate multi-attempt flows. A dataset-driven smoke test with a real model client is still outstanding.
+- **Manual demos**: `scripts/demo_phase3.py` walks through error classification, caching, retry configuration, and the main execution loop with mocked responses for quick inspection.
 
-The system includes comprehensive testing across all components:
+### Known gaps in validation
 
-**Test Statistics**:
-- Total Tests: 83 executor tests + 77 existing tests = 160 total
-- Coverage Areas: Unit tests, integration tests, performance tests, edge cases
-- Test Files: 4 executor test modules with 20+ tests each
+- Automated evaluation on the `dev` split has not yet been implemented, so the roadmap criterion of "10 dev items with at least one success" remains unverified.
+- Generation and validation cache telemetry is minimal; hit rates will need measurement once hooked up to real workloads.
+- Multi-line Lean error messages are currently flattened line-by-line, so repair prompts may omit broader goal context.
 
-**Error Classification Tests**:
-```python
-# Test error classification accuracy
-class TestErrorClassification:
-    def test_classify_unknown_identifier_error(self):
-        stderr = "unknown identifier 'Nat.add_comm'"
-        errors = classify_lean_error(stderr)
-        assert len(errors) == 1
-        assert errors[0].category == ErrorCategory.UNKNOWN_IDENTIFIER
+## 6. Operational Notes
 
-    def test_classify_type_mismatch_error(self):
-        stderr = "type mismatch: expected Nat, got Bool"
-        errors = classify_lean_error(stderr)
-        assert errors[0].category == ErrorCategory.TYPE_MISMATCH
-
-# Test caching behavior and performance
-class TestExecutorCache:
-    def test_compile_cache_miss_then_hit(self):
-        cache = ExecutorCache()
-        code = "theorem test : True := trivial"
-        
-        # First call should be cache miss
-        cache.cache_compile_result(code, mock_result)
-        result = cache.get_compile_result(code)
-        assert result == mock_result
-        
-        # Second call should be cache hit
-        assert cache.get_cache_info()["compile_hit_rate"] > 0
-```
-
-### 5.2 Integration Tests
-
-**End-to-End Autoformalization**:
-```python
-class TestExecutorIntegration:
-    def test_full_autoformalization_workflow(self):
-        """Test complete workflow from English to compiled Lean."""
-        item = {
-            "id": "test_theorem",
-            "english": {
-                "statement": "True is true", 
-                "steps": ["Use the trivial tactic"]
-            }
-        }
-        
-        executor = AutoformalizationExecutor(model_client)
-        config = RetryConfig(max_attempts=3)
-        result = executor.autoformalize(item, config)
-        
-        # Verify successful completion
-        assert result.success
-        assert result.final_code == "theorem test : True := trivial"
-        assert result.attempts == 2  # Succeeded after error recovery
-        assert len(result.errors_encountered) >= 1
-        assert len(result.generation_log) >= 2
-```
-
-### 5.3 Performance Validation
-
-**System Performance Metrics**:
-- **Cache Hit Rates**: 50-100% in multi-attempt scenarios
-- **Average Execution Time**: <1s for simple theorems, <30s for complex proofs
-- **Error Classification Accuracy**: >95% on common error patterns
-- **Memory Efficiency**: LRU cache prevents memory growth
-
-**Retry Policy Effectiveness**:
-```python
-class TestRetryPolicyExecutor:
-    def test_execute_with_retries_success_later_attempt(self):
-        """Verify retry policy improves success rates."""
-        # Demonstrates 2x+ improvement over single-attempt baseline
-        # Shows adaptive beam search and temperature scheduling
-        # Validates error-aware repair prompt generation
-```
-
-## 6. Performance and Capabilities
-
-### 6.1 System Performance
-
-**Achieved Metrics**:
-- Error Classification: 5 comprehensive categories covering >95% of common Lean compilation errors
-- Cache Performance: 50-100% hit rates in multi-attempt scenarios, significantly reducing redundant computation
-- Execution Speed: Sub-second performance for simple proofs, <30s for complex autoformalization tasks
-- Memory Efficiency: LRU caching prevents unbounded memory growth while maintaining high hit rates
-
-**Retry Policy Effectiveness**:
-- Adaptive Exploration: Beam size increases from 1→3→5 across attempts with corresponding temperature scaling
-- Error Recovery: Specialized repair prompts for each error category improve success rates
-- Early Termination: Stops on first success, avoiding unnecessary computation
-
-### 6.2 System Robustness
-
-**Error Handling**:
-- Comprehensive Classification: 5-category taxonomy (unknown_identifier, type_mismatch, tactic_failed, missing_premise, syntax_error)
-- Graceful Degradation: Falls back to generic repair prompts for unclassified errors
-- Exception Safety: All components handle failures gracefully with detailed logging
-
-**Integration Quality**:
-- Modular Design: Clean interfaces between components enable independent testing and development
-- Backward Compatibility: Maintains existing `executor.py` interface as deprecated wrapper
-- Extensibility: Hook points for future premise retrieval and evaluation systems
+- Compile caching provides the largest savings today; repair prompts now flow into successive generations but remain template-based.
+- Generation retries still operate against mocked LLM interfaces in tests. When integrating a real client, ensure that the prompt override pathway is respected and that seeds/temperature schedules map cleanly to the provider API.
+- Before productizing, add lightweight metrics around attempt counts, cache effectiveness, and error distributions so future documentation can cite measured behaviour instead of assumptions.
 
 ## 7. Design Decisions and Trade-offs
 
@@ -390,10 +295,10 @@ class TestRetryPolicyExecutor:
 - Rationale: Improves maintainability, testability, and enables independent development
 - Trade-off: Increased complexity vs. better separation of concerns
 
-**Multi-Level Caching**:
-- Decision: Implement compilation, generation, and validation caches
-- Rationale: Eliminates redundant expensive operations (compilation ~1s, generation ~0.5s)
-- Trade-off: Memory usage vs. performance optimization
+**Caching Strategy**:
+- Decision: Add compilation caching (actively used) alongside generation/validation caches that can be enabled when telemetry demands it
+- Rationale: Compilation remains the dominant cost, making caching a low-risk win; additional layers are ready for future tuning
+- Trade-off: Storing extra cache layers increases complexity without clear benefit until real hit-rate data is collected
 
 **Error-Specific Repair Prompts**:
 - Decision: 5-category error taxonomy with specialized repair strategies

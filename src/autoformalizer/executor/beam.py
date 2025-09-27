@@ -126,7 +126,11 @@ class BeamSearchExecutor:
             # Generate new candidate
             try:
                 candidate = generate_lean_proof(
-                    item, self.model_client, max_tokens=config.max_tokens, temperature=temperature
+                    item,
+                    self.model_client,
+                    max_tokens=config.max_tokens,
+                    temperature=temperature,
+                    prompt=prompt,
                 )
                 candidates.append(candidate)
 
