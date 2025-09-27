@@ -7,6 +7,7 @@ into syntactically valid Lean 4 code through LLM generation and validation.
 
 from .decode import (
     CandidateLean,
+    ModelClient,
     extract_lean_code,
     generate_batch,
     generate_lean_proof,
@@ -15,6 +16,7 @@ from .decode import (
 
 __all__ = [
     "CandidateLean",
+    "ModelClient",
     "extract_lean_code",
     "generate_batch",
     "generate_lean_proof",
