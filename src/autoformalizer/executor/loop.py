@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..decode import CandidateLean, ModelClient
-from .beam import BeamSearchExecutor, RetryConfig, RetryPolicyExecutor
+from .beam import BeamSearchExecutor, CandidateRecord, RetryConfig, RetryPolicyExecutor
 from .cache import ExecutorCache
 from .errors import LeanError
 from .lean import compile_lean_snippet
@@ -27,6 +27,7 @@ class AutoformalizationResult:
     errors_encountered: list[LeanError]
     generation_log: list[dict[str, Any]] = field(default_factory=list)
     cache_info: dict[str, Any] = field(default_factory=dict)
+    candidate_records: list[CandidateRecord] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
@@ -47,6 +48,20 @@ class AutoformalizationResult:
             ],
             "generation_log": self.generation_log,
             "cache_info": self.cache_info,
+            "candidate_records": [
+                {
+                    "attempt": record.attempt,
+                    "beam_index": record.beam_index,
+                    "compiled": record.compiled,
+                    "compile_ok": record.compile_ok if record.compiled else None,
+                    "compile_stderr": record.compile_stderr,
+                    "is_valid": record.candidate.is_valid,
+                    "generation_time": record.candidate.generation_time,
+                    "code_length": len(record.candidate.code) if record.candidate.code else 0,
+                    "errors": record.candidate.errors,
+                }
+                for record in self.candidate_records
+            ],
         }
 
 
@@ -92,28 +107,22 @@ class AutoformalizationExecutor:
 
         try:
             # Execute retry policy
-            candidates, successful_attempt, _, errors = self.retry_executor.execute_with_retries(
-                item, config, compile_fn
+            candidate_records, successful_attempt, total_time, errors = (
+                self.retry_executor.execute_with_retries(item, config, compile_fn)
             )
 
             # Find successful candidate if any
             final_code = None
-            if successful_attempt > 0:
-                # Find the first successful candidate
-                for candidate in candidates:
-                    if candidate.is_valid and candidate.code:
-                        ok, _ = compile_fn(candidate.code)
-                        if ok:
-                            final_code = candidate.code
-                            break
+            for record in candidate_records:
+                if record.compiled and record.compile_ok and record.candidate.code:
+                    final_code = record.candidate.code
+                    break
 
             # Create generation log
-            generation_log = self._create_generation_log(candidates, config)
+            generation_log = self._create_generation_log(candidate_records, config)
 
             # Get cache statistics
             cache_info = self.cache.get_cache_info()
-
-            total_time = time.time() - start_time
 
             result = AutoformalizationResult(
                 success=successful_attempt > 0,
@@ -123,6 +132,7 @@ class AutoformalizationExecutor:
                 errors_encountered=errors,
                 generation_log=generation_log,
                 cache_info=cache_info,
+                candidate_records=candidate_records,
             )
 
             LOG.info(
@@ -162,15 +172,21 @@ class AutoformalizationExecutor:
         return result.ok, result.stderr
 
     def _create_generation_log(
-        self, candidates: list[CandidateLean], config: RetryConfig
+        self, candidate_records: list[CandidateRecord], config: RetryConfig
     ) -> list[dict[str, Any]]:
         """Create detailed generation log from candidates."""
         log = []
 
-        candidate_idx = 0
+        records_by_attempt: dict[int, list[CandidateRecord]] = {}
+        for record in candidate_records:
+            records_by_attempt.setdefault(record.attempt, []).append(record)
+
         for attempt in range(1, config.max_attempts + 1):
             beam_size = config.beam_schedule[attempt - 1]
             temperature = config.temperature_schedule[attempt - 1]
+
+            attempt_records = records_by_attempt.get(attempt, [])
+            attempt_records_sorted = sorted(attempt_records, key=lambda r: r.beam_index)
 
             attempt_log = {
                 "attempt": attempt,
@@ -179,18 +195,20 @@ class AutoformalizationExecutor:
                 "candidates": [],
             }
 
-            for i in range(beam_size):
-                if candidate_idx < len(candidates):
-                    candidate = candidates[candidate_idx]
-                    candidate_log = {
-                        "index": i,
+            for record in attempt_records_sorted:
+                candidate = record.candidate
+                attempt_log["candidates"].append(
+                    {
+                        "index": record.beam_index,
                         "is_valid": candidate.is_valid,
                         "generation_time": candidate.generation_time,
                         "code_length": len(candidate.code) if candidate.code else 0,
                         "errors": candidate.errors,
+                        "compiled": record.compiled,
+                        "compile_ok": record.compile_ok if record.compiled else None,
+                        "compile_stderr": record.compile_stderr,
                     }
-                    attempt_log["candidates"].append(candidate_log)
-                    candidate_idx += 1
+                )
 
             log.append(attempt_log)
 

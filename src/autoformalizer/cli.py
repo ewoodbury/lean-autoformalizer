@@ -11,7 +11,8 @@ import typer
 from .datasets import DatasetLoader, DatasetValidator
 from .decode import OpenRouterClient, generate_lean_proof
 from .decode.decode import ENGLISH_TO_LEAN_PROMPT
-from .executor import run_proof
+from .evals import EvaluationReport, run_evaluation
+from .executor import RetryConfig, run_proof
 
 app = typer.Typer(help="Utilities for working with Lean autoformalization experiments.")
 
@@ -24,6 +25,187 @@ DEFAULT_DEV_RATIO = 0.2
 DEFAULT_TEST_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_SHOW_ITEMS = 0
+DEFAULT_EVAL_DATASET = Path("datasets/test.jsonl")
+DEFAULT_PASS_K = (1, 5, 20)
+DEFAULT_MAX_ATTEMPTS = RetryConfig().max_attempts
+
+
+@app.command()
+def evaluate(
+    dataset: Annotated[
+        Path,
+        typer.Option(
+            "--dataset",
+            "-d",
+            help="Path to the dataset JSONL file to evaluate.",
+            show_default=True,
+        ),
+    ] = DEFAULT_EVAL_DATASET,
+    model: Annotated[
+        str,
+        typer.Option("--model", help="OpenRouter model identifier to use for generation."),
+    ] = "x-ai/grok-4-fast",
+    api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key",
+            help="OpenRouter API key. Defaults to OPENROUTER_API_KEY environment variable.",
+            envvar="OPENROUTER_API_KEY",
+            show_envvar=True,
+        ),
+    ] = None,
+    max_attempts: Annotated[
+        int,
+        typer.Option(
+            "--max-attempts",
+            min=1,
+            help="Maximum retry attempts per item.",
+            show_default=True,
+        ),
+    ] = DEFAULT_MAX_ATTEMPTS,
+    beam: Annotated[
+        list[int] | None,
+        typer.Option(
+            "--beam",
+            help=(
+                "Beam size schedule (repeat option for each attempt). "
+                "If omitted, uses retry defaults."
+            ),
+            show_default=False,
+        ),
+    ] = None,
+    temperature: Annotated[
+        list[float] | None,
+        typer.Option(
+            "--temperature",
+            help=(
+                "Temperature schedule (repeat option for each attempt). "
+                "If omitted, uses retry defaults."
+            ),
+            show_default=False,
+        ),
+    ] = None,
+    max_tokens: Annotated[
+        int,
+        typer.Option(
+            "--max-tokens",
+            min=64,
+            help="Maximum tokens to request from the model for each generation.",
+        ),
+    ] = 512,
+    pass_k: Annotated[
+        list[int] | None,
+        typer.Option(
+            "--k",
+            help="Pass@K thresholds to report (repeat for multiple values).",
+            show_default=True,
+        ),
+    ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            min=1,
+            help="Limit evaluation to the first N items (for smoke tests).",
+            show_default=False,
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional path to save the JSON report."),
+    ] = None,
+) -> None:
+    """Run the full evaluation suite and print aggregated metrics."""
+
+    if not dataset.exists():
+        typer.secho(f"Dataset not found: {dataset}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    pass_k_values = tuple(sorted({int(k) for k in pass_k})) if pass_k else DEFAULT_PASS_K
+
+    if not pass_k_values:
+        typer.secho("At least one --k threshold must be provided.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    if any(k <= 0 for k in pass_k_values):
+        typer.secho("Pass@K thresholds must be positive integers.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    config_kwargs: dict[str, object] = {"max_attempts": max_attempts, "max_tokens": max_tokens}
+    if beam:
+        config_kwargs["beam_schedule"] = list(beam)
+    if temperature:
+        config_kwargs["temperature_schedule"] = list(temperature)
+
+    try:
+        retry_config = RetryConfig(**config_kwargs)
+    except ValueError as exc:
+        typer.secho(f"Invalid retry configuration: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    def model_factory() -> OpenRouterClient:
+        return OpenRouterClient(api_key=api_key, model=model)
+
+    try:
+        report = run_evaluation(
+            dataset_path=dataset,
+            model_client_factory=model_factory,
+            retry_config=retry_config,
+            pass_k=pass_k_values,
+            limit=limit,
+        )
+    except Exception as exc:
+        typer.secho(f"Evaluation failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_evaluation_report(report)
+
+    if output:
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report.as_dict(), indent=2), encoding="utf-8")
+            typer.secho(f"Saved report to: {output}", fg=typer.colors.GREEN)
+        except OSError as exc:  # pragma: no cover - filesystem failures are rare but critical
+            typer.secho(f"Failed to write report: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1) from exc
+
+
+def _format_pass_flags(pass_flags: dict[int, bool], pass_k: tuple[int, ...]) -> str:
+    return " ".join(f"@{k}:{'Y' if pass_flags.get(k) else 'N'}" for k in pass_k)
+
+
+def _print_evaluation_report(report: EvaluationReport) -> None:
+    metrics = report.metrics
+
+    typer.secho("\n=== Evaluation Summary ===", fg=typer.colors.BLUE, bold=True)
+    typer.echo(f"Dataset: {report.dataset_path}")
+    typer.echo(f"Items evaluated: {metrics.total_items}")
+    typer.echo(f"Successes: {metrics.success_count} ({metrics.success_rate:.1%})")
+    typer.echo(f"Compile-rate@1: {metrics.compile_rate_at_1:.1%}")
+
+    typer.secho("\nPass@K:", fg=typer.colors.BLUE, bold=True)
+    for k in report.pass_k:
+        typer.echo(f"  Pass@{k}: {metrics.pass_at_k.get(k, 0.0):.1%}")
+
+    typer.secho("\nAttempts per proof:", fg=typer.colors.BLUE, bold=True)
+    typer.echo(
+        f"  mean={metrics.attempts_mean:.2f}, median={metrics.attempts_median:.1f}, "
+        f"p90={metrics.attempts_p90:.1f}"
+    )
+
+    typer.secho("\nTime per proof (s):", fg=typer.colors.BLUE, bold=True)
+    typer.echo(
+        f"  mean={metrics.time_mean:.2f}, median={metrics.time_median:.2f}, "
+        f"p90={metrics.time_p90:.2f}"
+    )
+
+    typer.secho("\nPer-item outcomes:", fg=typer.colors.BLUE, bold=True)
+    for item in report.items:
+        status = "Success!" if item.success else "Failure..."
+        typer.echo(
+            f"{status} {item.item_id} :: attempts={item.attempts}, "
+            f"success_rank={item.success_rank or '-'}, time={item.total_time:.2f}s, "
+            f"pass[{_format_pass_flags(item.pass_at_k, report.pass_k)}]"
+        )
 
 
 @app.command()

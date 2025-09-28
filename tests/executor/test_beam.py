@@ -259,11 +259,15 @@ class TestRetryPolicyExecutor:
         item = {"english": {"statement": "True is true"}}
         config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
 
-        candidates, attempt, total_time, errors = retry_executor.execute_with_retries(
+        candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
         )
 
-        assert len(candidates) == 1
+        assert len(candidate_records) == 1
+        record = candidate_records[0]
+        assert record.compiled is True
+        assert record.compile_ok is True
+        assert record.candidate is successful_candidate
         assert attempt == 1  # Succeeded on first attempt
         assert total_time > 0
         assert len(errors) == 0
@@ -303,11 +307,13 @@ class TestRetryPolicyExecutor:
         item = {"english": {"statement": "True is true"}}
         config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
 
-        candidates, attempt, _, errors = retry_executor.execute_with_retries(
+        candidate_records, attempt, _, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
         )
 
-        assert len(candidates) == 2  # Both candidates returned
+        assert len(candidate_records) == 2  # Both candidates recorded
+        assert candidate_records[0].compile_ok is False
+        assert candidate_records[1].compile_ok is True
         assert attempt == 2  # Succeeded on second attempt
         assert len(errors) == 1  # One error encountered
         assert errors[0] == mock_error
@@ -334,11 +340,12 @@ class TestRetryPolicyExecutor:
         item = {"english": {"statement": "True is true"}}
         config = RetryConfig(max_attempts=2, beam_schedule=[1, 1], temperature_schedule=[0.3, 0.5])
 
-        candidates, attempt, total_time, errors = retry_executor.execute_with_retries(
+        candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
         )
 
-        assert len(candidates) == 2  # All candidates returned
+        assert len(candidate_records) == 2  # All candidates recorded
+        assert all(record.compile_ok is False for record in candidate_records)
         assert attempt == 0  # No successful attempt
         assert total_time > 0
         assert len(errors) >= 1  # Should have collected errors
@@ -365,11 +372,13 @@ class TestRetryPolicyExecutor:
         item = {"english": {"statement": "True is true"}}
         config = RetryConfig(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.3])
 
-        candidates, attempt, _, _ = retry_executor.execute_with_retries(
+        candidate_records, attempt, _, _ = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
         )
 
-        assert len(candidates) == 2
+        assert len(candidate_records) == 2
+        assert candidate_records[0].compiled is False  # invalid candidate not compiled
+        assert candidate_records[1].compiled is True
         assert attempt == 1  # Should succeed due to valid candidate
         # Compile function should only be called once (for valid candidate)
 
@@ -432,12 +441,13 @@ class TestBeamSearchIntegration:
             max_attempts=3, beam_schedule=[1, 1, 1], temperature_schedule=[0.3, 0.5, 0.7]
         )
 
-        candidates, attempt, total_time, errors = retry_executor.execute_with_retries(
+        candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
         )
 
         # Should succeed on third attempt
         assert attempt == 3
-        assert len(candidates) >= 3  # All generated candidates
+        assert len(candidate_records) >= 3  # All generated candidates
+        assert candidate_records[-1].compile_ok is True
         assert total_time > 0
         assert len(errors) >= 1  # Should have captured compilation error

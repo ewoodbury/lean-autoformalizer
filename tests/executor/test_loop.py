@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from autoformalizer.decode import CandidateLean
-from autoformalizer.executor.beam import RetryConfig
+from autoformalizer.executor.beam import CandidateRecord, RetryConfig
 from autoformalizer.executor.cache import ExecutorCache
 from autoformalizer.executor.errors import ErrorCategory, LeanError
 from autoformalizer.executor.lean import CompileResult
@@ -33,6 +33,7 @@ class TestAutoforizationResult:
             errors_encountered=errors,
             generation_log=[{"attempt": 1, "beam_size": 1}],
             cache_info={"compile_hit_rate": 0.8},
+            candidate_records=[],
         )
 
         assert result.success
@@ -60,6 +61,7 @@ class TestAutoforizationResult:
             errors_encountered=[error],
             generation_log=[{"attempt": 1}],
             cache_info={},
+            candidate_records=[],
         )
 
         result_dict = result.to_dict()
@@ -171,9 +173,36 @@ class TestAutoforizationExecutor:
             CandidateLean(code="third", is_valid=True, errors=[], generation_time=0.7),
         ]
 
+        candidate_records = [
+            CandidateRecord(
+                attempt=1,
+                beam_index=0,
+                candidate=candidates[0],
+                compiled=True,
+                compile_ok=True,
+                compile_stderr=None,
+            ),
+            CandidateRecord(
+                attempt=2,
+                beam_index=0,
+                candidate=candidates[1],
+                compiled=False,
+                compile_ok=False,
+                compile_stderr="invalid",
+            ),
+            CandidateRecord(
+                attempt=2,
+                beam_index=1,
+                candidate=candidates[2],
+                compiled=True,
+                compile_ok=False,
+                compile_stderr="goal mismatch",
+            ),
+        ]
+
         config = RetryConfig(max_attempts=2, beam_schedule=[1, 2], temperature_schedule=[0.3, 0.7])
 
-        log = executor._create_generation_log(candidates, config)
+        log = executor._create_generation_log(candidate_records, config)
 
         assert len(log) == 2  # Two attempts
 
@@ -183,6 +212,8 @@ class TestAutoforizationExecutor:
         assert log[0]["temperature"] == 0.3
         assert len(log[0]["candidates"]) == 1
         assert log[0]["candidates"][0]["is_valid"]
+        assert log[0]["candidates"][0]["compiled"] is True
+        assert log[0]["candidates"][0]["compile_ok"] is True
 
         # Second attempt
         assert log[1]["attempt"] == 2
@@ -190,7 +221,11 @@ class TestAutoforizationExecutor:
         assert log[1]["temperature"] == 0.7
         assert len(log[1]["candidates"]) == 2
         assert not log[1]["candidates"][0]["is_valid"]  # Second candidate
+        assert log[1]["candidates"][0]["compiled"] is False
+        assert log[1]["candidates"][0]["compile_ok"] is None
         assert log[1]["candidates"][1]["is_valid"]  # Third candidate
+        assert log[1]["candidates"][1]["compiled"] is True
+        assert log[1]["candidates"][1]["compile_ok"] is False
 
     @patch("autoformalizer.executor.loop.time.time")
     @patch.object(AutoformalizationExecutor, "_compile_with_cache")
@@ -206,14 +241,20 @@ class TestAutoforizationExecutor:
         executor = AutoformalizationExecutor(model_client)
 
         # Mock the retry executor to return successful result immediately
-        mock_candidates = [
-            CandidateLean(
-                code="theorem test : True := trivial", is_valid=True, errors=[], generation_time=0.5
-            )
-        ]
+        candidate = CandidateLean(
+            code="theorem test : True := trivial", is_valid=True, errors=[], generation_time=0.5
+        )
+        candidate_record = CandidateRecord(
+            attempt=1,
+            beam_index=0,
+            candidate=candidate,
+            compiled=True,
+            compile_ok=True,
+            compile_stderr=None,
+        )
 
         with patch.object(executor.retry_executor, "execute_with_retries") as mock_retry:
-            mock_retry.return_value = (mock_candidates, 1, 1.0, [])
+            mock_retry.return_value = ([candidate_record], 1, 1.5, [])
 
             item = {"english": {"statement": "True is true"}}
             result = executor.autoformalize(item)
@@ -238,15 +279,21 @@ class TestAutoforizationExecutor:
         executor = AutoformalizationExecutor(model_client)
 
         # Mock the retry executor to return failure
-        mock_candidates = [
-            CandidateLean(
-                code="theorem bad : True := sorry", is_valid=True, errors=[], generation_time=0.5
-            )
-        ]
+        candidate = CandidateLean(
+            code="theorem bad : True := sorry", is_valid=True, errors=[], generation_time=0.5
+        )
+        candidate_record = CandidateRecord(
+            attempt=1,
+            beam_index=0,
+            candidate=candidate,
+            compiled=True,
+            compile_ok=False,
+            compile_stderr="compilation error",
+        )
         mock_errors = [LeanError(ErrorCategory.TACTIC_FAILED, "tactic failed")]
 
         with patch.object(executor.retry_executor, "execute_with_retries") as mock_retry:
-            mock_retry.return_value = (mock_candidates, 0, 4.5, mock_errors)
+            mock_retry.return_value = ([candidate_record], 0, 5.0, mock_errors)
 
             item = {"english": {"statement": "Hard theorem"}}
             config = RetryConfig(max_attempts=3)
@@ -258,6 +305,7 @@ class TestAutoforizationExecutor:
         assert result.total_time == 5.0
         assert len(result.errors_encountered) == 1
         assert result.errors_encountered[0].category == ErrorCategory.TACTIC_FAILED
+        assert len(result.candidate_records) == 1
 
     @patch("autoformalizer.executor.loop.time.time")
     def test_autoformalize_exception_handling(self, mock_time):
@@ -474,6 +522,8 @@ class TestExecutorIntegration:
         assert result.attempts == 2
         assert len(result.errors_encountered) >= 1
         assert len(result.generation_log) >= 2
+        assert len(result.candidate_records) >= 1
+        assert any(record.compile_ok for record in result.candidate_records)
 
         # Verify both generation and compilation were called
         assert mock_generate.call_count >= 2

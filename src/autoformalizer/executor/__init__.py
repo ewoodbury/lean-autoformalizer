@@ -5,7 +5,7 @@ This package provides the main execution engine for converting English proofs
 to Lean code with intelligent error handling, retry policies, and caching.
 """
 
-from .beam import RetryConfig
+from .beam import CandidateRecord, RetryConfig
 from .cache import CacheStats, ExecutorCache
 from .errors import ErrorCategory, ErrorClassifier, ErrorSeverity, LeanError
 from .lean import CompileResult, compile_lean_snippet, run_proof
@@ -15,6 +15,7 @@ __all__ = [
     "AutoformalizationExecutor",
     "AutoformalizationResult",
     "CacheStats",
+    "CandidateRecord",
     "CompileResult",
     "ErrorCategory",
     "ErrorClassifier",

@@ -14,7 +14,7 @@ from .errors import ErrorClassifier, LeanError, generate_repair_prompt
 LOG = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class RetryConfig:
     """Configuration for retry policy and beam search."""
 
@@ -74,6 +74,24 @@ class RetryConfig:
 
         if any(temp < 0 or temp > 2.0 for temp in self.temperature_schedule):
             raise ValueError("All temperatures must be between 0 and 2.0")
+
+
+@dataclass(slots=True)
+class CandidateRecord:
+    """Record describing a generated candidate and compilation outcome."""
+
+    attempt: int
+    beam_index: int
+    candidate: CandidateLean
+    compiled: bool
+    compile_ok: bool
+    compile_stderr: str | None = None
+
+    @property
+    def code(self) -> str:
+        """Expose candidate code for convenience."""
+
+        return self.candidate.code
 
 
 class BeamSearchExecutor:
@@ -184,15 +202,15 @@ class RetryPolicyExecutor:
         item: dict[str, Any],
         config: RetryConfig,
         compile_fn: callable[[str], tuple[bool, str]],  # (ok, stderr)
-    ) -> tuple[list[CandidateLean], int, float, list[LeanError]]:
+    ) -> tuple[list[CandidateRecord], int, float, list[LeanError]]:
         """
         Execute autoformalization with retry policy.
 
         Returns:
-            (all_candidates, successful_attempt, total_time, errors_encountered)
+            (candidate_records, successful_attempt, total_time, errors_encountered)
         """
         start_time = time.time()
-        all_candidates = []
+        all_records: list[CandidateRecord] = []
         errors_encountered = []
         error_context = None
 
@@ -203,22 +221,36 @@ class RetryPolicyExecutor:
             candidates = self.beam_executor.generate_candidates(
                 item, attempt, config, error_context
             )
-            all_candidates.extend(candidates)
 
-            # Try to compile each candidate
-            for candidate in candidates:
-                if not candidate.is_valid:
-                    # Skip invalid candidates
+            for beam_index, candidate in enumerate(candidates):
+                record = CandidateRecord(
+                    attempt=attempt,
+                    beam_index=beam_index,
+                    candidate=candidate,
+                    compiled=False,
+                    compile_ok=False,
+                    compile_stderr=None,
+                )
+
+                if not candidate.is_valid or not candidate.code.strip():
+                    # Invalid candidates are recorded but not compiled
+                    if candidate.errors:
+                        record.compile_stderr = "; ".join(candidate.errors)
+                    all_records.append(record)
                     continue
 
                 # Try compilation
                 ok, stderr = compile_fn(candidate.code)
+                record.compiled = True
+                record.compile_ok = ok
+                record.compile_stderr = stderr or None
+                all_records.append(record)
 
                 if ok:
                     # Success!
                     total_time = time.time() - start_time
                     LOG.info("Success on attempt %d after %.2fs", attempt, total_time)
-                    return all_candidates, attempt, total_time, errors_encountered
+                    return all_records, attempt, total_time, errors_encountered
 
                 # Compilation failed - classify error for next attempt
                 if stderr:
@@ -233,7 +265,12 @@ class RetryPolicyExecutor:
         # All attempts failed
         total_time = time.time() - start_time
         LOG.info("All %d attempts failed after %.2fs", config.max_attempts, total_time)
-        return all_candidates, 0, total_time, errors_encountered
+        return all_records, 0, total_time, errors_encountered
 
 
-__all__ = ["BeamSearchExecutor", "RetryConfig", "RetryPolicyExecutor"]
+__all__ = [
+    "BeamSearchExecutor",
+    "CandidateRecord",
+    "RetryConfig",
+    "RetryPolicyExecutor",
+]

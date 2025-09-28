@@ -126,6 +126,8 @@ Build a small, verifiable system that converts short, structured English proofs 
 - Pass@K: percent compiled within K candidates (e.g., K in {5, 20}).
 - Attempts per proof (median, p90).
 - Time per proof (wall clock).
+
+Optional:
 - Token cost per proof (prompt + completion).
 - Proof length (tactic lines/chars).
 - Error distribution across taxonomy.
