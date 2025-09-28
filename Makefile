@@ -68,20 +68,17 @@ dev-install: bootstrap ## Install development dependencies and setup
 	@uv sync --group dev
 	@echo "$(GREEN)✓ Development environment ready$(RESET)"
 
-lint: ## Run Python linting with ruff
+fix-lint: ## Run all linting and formatting fixes
+	@echo "$(CYAN)Running all linters and formatters fixes...$(RESET)"
+	@uv run ruff check --fix $(PYTHON_SRC) $(TESTS_DIR)
+	@uv run ruff format $(PYTHON_SRC) $(TESTS_DIR)
+	@echo "$(GREEN)✓ Linting and formatting fixes applied$(RESET)"
+
+test-lint: ## Run Python linting and formatting checks with ruff
 	@echo "$(CYAN)Running Python linter...$(RESET)"
 	@uv run ruff check $(PYTHON_SRC) $(TESTS_DIR)
-	@echo "$(GREEN)✓ Linting completed$(RESET)"
-
-format: ## Format Python code with ruff
-	@echo "$(CYAN)Formatting Python code...$(RESET)"
-	@uv run ruff format $(PYTHON_SRC) $(TESTS_DIR)
-	@echo "$(GREEN)✓ Code formatted$(RESET)"
-
-format-check: ## Check if Python code is properly formatted
-	@echo "$(CYAN)Checking Python code formatting...$(RESET)"
 	@uv run ruff format --check $(PYTHON_SRC) $(TESTS_DIR)
-	@echo "$(GREEN)✓ Format check passed$(RESET)"
+	@echo "$(GREEN)✓ Linting and formatting completed$(RESET)"
 
 type-check: ## Run pyrefly type checking
 	@echo "$(CYAN)Running type checking...$(RESET)"
