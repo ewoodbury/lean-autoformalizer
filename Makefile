@@ -77,13 +77,24 @@ fix-lint: ## Run all linting and formatting fixes
 test-lint: ## Run Python linting and formatting checks with ruff
 	@echo "$(CYAN)Running Python linter...$(RESET)"
 	@uv run ruff check $(PYTHON_SRC) $(TESTS_DIR)
-	@uv run ruff format --check $(PYTHON_SRC) $(TESTS_DIR)
 	@echo "$(GREEN)✓ Linting and formatting completed$(RESET)"
 
-type-check: ## Run pyrefly type checking
+test-format: ## Check Python code formatting with ruff
+	@echo "$(CYAN)Checking Python code formatting...$(RESET)"
+	@uv run ruff format --check $(PYTHON_SRC) $(TESTS_DIR)
+	@echo "$(GREEN)✓ Code formatting is correct$(RESET)"
+
+test-type-check: ## Run pyrefly type checking
 	@echo "$(CYAN)Running type checking...$(RESET)"
 	@uv run pyrefly check $(PYTHON_SRC)
 	@echo "$(GREEN)✓ Type checking passed$(RESET)"
+
+test-static-python: ## Run all static analysis checks for Python code
+	@echo "$(CYAN)Running all static analysis checks...$(RESET)"
+	@make test-lint
+	@make test-format
+	@make test-type-check
+	@echo "$(GREEN)✓ All static analysis checks passed$(RESET)"
 
 check-all: lint format-check type-check check-lean ## Run all code quality checks
 	@echo "$(GREEN)✓ All checks passed$(RESET)"
