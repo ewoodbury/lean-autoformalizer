@@ -24,7 +24,7 @@ flowchart TD
     llmDecode -->|Lean candidate string| decoder
     decoder -->|CandidateLean| validator["decode.validate_lean_code"]
     validator -->|valid candidate| executorLoop["executor.AutoformalizationExecutor"]
-    executorLoop -->|beam attempt| beamExec["executor.BeamSearchExecutor"]
+    executorLoop -->|schedule attempt / retry| beamExec["executor.BeamSearchExecutor"]
     beamExec -->|candidate batch| executorLoop
     beamExec -->|LLM prompt| llmBeam["ModelClient (retry generations)"]
     llmBeam -->|Lean candidate| cache["executor.ExecutorCache"]
@@ -34,6 +34,7 @@ flowchart TD
     decision -->|yes| success["Success"]
     decision -->|no| errorClassifier["executor.ErrorClassifier"]
     errorClassifier -->|repair prompt| beamExec
+    errorClassifier -->|signal retry| executorLoop
     executorLoop -->|max attempts exhausted| failure["Failure"]
     success --> outputs["AutoformalizationResult to CLI/tests"]
     failure --> outputs
@@ -46,6 +47,7 @@ Key behaviours:
 - Generation cache keys on prompt and sampling parameters so repeated repairs with identical context reuse LLM output.
 - All attempts produce `CandidateRecord` objects, enabling fine-grained evaluation metrics and audit trails.
 - Compilation outcomes branch through a decision point: a successful compile returns immediately, while failures are classified and fed back into retry prompting until attempts are exhausted.
+- `AutoformalizationExecutor` schedules a beam attempt both for the initial try and whenever the error classifier signals a retry, so the loop only calls back into `BeamSearchExecutor` when another batch of candidates is required.
 
 ## Executor loop
 
@@ -58,6 +60,16 @@ Key behaviours:
 - Bounding controls (max attempts, timeout in the Lean compiler helper, LRU sizes) protect against runaway retries.
 
 `AutoformalizationResult` contains attempt logs, compilation outcomes, and cache metadata consumed by CLI commands, tests, and evaluation reports.
+
+## Beam search executors and Retries
+
+Beam search is a parallel sampling strategy: instead of trusting a single generation, it spins up several “beam slots,” each representing one independent candidate drawn from the model with slightly different randomness. The executor fills those slots using the configured schedules.
+
+- `BeamSearchExecutor` constructs prompts for each beam slot. Initial attempts call into the decode prompt template; repair attempts call `generate_repair_prompt` with the primary classified error.
+
+    - The beam system samples multiple candidates per attempt according to the `RetryConfig` schedules. `beam_schedule[n]` controls how many generations are requested on attempt *n*, while the paired `temperature_schedule[n]` widens or narrows the sampling distribution to trade determinism for diversity. Each slot uses a distinct seed so the LLM explores different proofs even with identical prompts. Collecting a batch of diverse candidates before compiling raises the odds that at least one proof both passes structural validation and compiles, letting the executor terminate early on success.
+- `ExecutorCache` exposes LRU caches for generation, compilation, and optional validation, exposing hit/miss stats for telemetry.
+- `RetryPolicyExecutor` drives attempts until success or exhaustion, compiling valid candidates via a callback that applies compile caching.
 
 ## Dataset lifecycle
 
@@ -93,13 +105,6 @@ Offline experimentation typically follows this loop:
 2. Run targeted decode experiments via `autoformalize decode` or `make decode` to inspect the current model behaviour interactively.
 3. Execute evaluations on train/dev/test splits with customized retry schedules to tune beam sizes, temperatures, or max tokens.
 4. Inspect `EvaluationReport` artifacts or the captured `generation_log` to understand failure categories and cache effectiveness.
-
-## Development workflow
-
-- Python tooling is managed through `uv`; `./scripts/bootstrap_python.sh` installs runtime and development dependencies inside a local virtual environment (`.venv`).
-- Lean tooling uses `lake` with `Autoformalizer.Basic` compiled alongside mathlib. `make build-lean` or `make check-lean` validates the Lean environment.
-- Tests live under `tests/` and mirror the package layout, covering CLI decoding, dataset utilities, executor loop behaviours, and evaluation metrics. `uv run pytest` executes the full suite, while `make lint` and `make format` delegate to `ruff` for combined linting and formatting.
-- Scripts in `scripts/` provide reproducible dataset operations and demos (`demo_phase3.py`, `create_splits.py`, `validate_dataset.py`). They rely on the shared executor interfaces rather than duplicating logic.
 
 ## Notes on Future Work
 
