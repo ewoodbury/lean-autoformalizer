@@ -20,14 +20,14 @@ class RetryConfig:
 
     max_attempts: int = 5
     beam_schedule: list[int] = field(default_factory=lambda: [1, 3, 3, 5, 5])
-    temperature_schedule: list[float] = field(default_factory=lambda: [0.3, 0.5, 0.5, 0.7, 0.7])
+    temperature_schedule: list[float] = field(default_factory=lambda: [0.3, 0.5, 0.5, 0.7, 0.8])
     max_tokens: int = 512
 
     def __post_init__(self) -> None:
         """Validate and adjust configuration after initialization."""
         # Auto-adjust schedules if max_attempts is different from default
         default_beam = [1, 3, 3, 5, 5]
-        default_temp = [0.3, 0.5, 0.5, 0.7, 0.7]
+        default_temp = [0.3, 0.5, 0.5, 0.7, 0.8]
 
         if len(self.beam_schedule) != self.max_attempts:
             if self.beam_schedule == default_beam:

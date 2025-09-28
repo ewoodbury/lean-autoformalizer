@@ -17,7 +17,7 @@ class TestRetryConfig:
 
         assert config.max_attempts == 5
         assert config.beam_schedule == [1, 3, 3, 5, 5]
-        assert config.temperature_schedule == [0.3, 0.5, 0.5, 0.7, 0.7]
+        assert config.temperature_schedule == [0.3, 0.5, 0.5, 0.7, 0.8]
         assert config.max_tokens == 512
 
     def test_custom_configuration(self):
