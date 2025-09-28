@@ -200,7 +200,7 @@ def _print_evaluation_report(report: EvaluationReport) -> None:
 
     typer.secho("\nPer-item outcomes:", fg=typer.colors.BLUE, bold=True)
     for item in report.items:
-        status = "Success!" if item.success else "Failure..."
+        status = "✅" if item.success else "❌"
         typer.echo(
             f"{status} {item.item_id} :: attempts={item.attempts}, "
             f"success_rank={item.success_rank or '-'}, time={item.total_time:.2f}s, "
