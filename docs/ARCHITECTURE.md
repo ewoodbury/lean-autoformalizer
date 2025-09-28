@@ -44,7 +44,7 @@ Key behaviours:
 
 - Each attempt uses configurable beam and temperature schedules; the first attempt uses the vanilla English prompt, while subsequent attempts inject repair prompts derived from categorized compiler errors.
 - Compilation requests run inside the project Lake environment. Results are cached by Lean source hash to avoid redundant compilations.
-- Generation cache keys on prompt and sampling parameters so repeated repairs with identical context reuse LLM output.
+- Prompt and sampling parameters are cached, so repair prompts with identical context reuse LLM output.
 - All attempts produce `CandidateRecord` objects, enabling fine-grained evaluation metrics and audit trails.
 - Compilation outcomes branch through a decision point: a successful compile returns immediately, while failures are classified and fed back into retry prompting until attempts are exhausted.
 - `AutoformalizationExecutor` schedules a beam attempt both for the initial try and whenever the error classifier signals a retry, so the loop only calls back into `BeamSearchExecutor` when another batch of candidates is required.
@@ -61,15 +61,17 @@ Key behaviours:
 
 `AutoformalizationResult` contains attempt logs, compilation outcomes, and cache metadata consumed by CLI commands, tests, and evaluation reports.
 
-## Beam search executors and Retries
+## Beam search
 
-Beam search is a parallel sampling strategy: instead of trusting a single generation, it spins up several “beam slots,” each representing one independent candidate drawn from the model with slightly different randomness. The executor fills those slots using the configured schedules.
+Beam search is a parallel sampling strategy: instead of generating only one proof candidate, it spins up several beam slots where each generates an independent candidate with slightly different randomness.
+
+On each subsequent retry, the executor increases the beam width and temperature to explore a wider candidate space, increasing the odds of finding a valid proof.
 
 - `BeamSearchExecutor` constructs prompts for each beam slot. Initial attempts call into the decode prompt template; repair attempts call `generate_repair_prompt` with the primary classified error.
 
-    - The beam system samples multiple candidates per attempt according to the `RetryConfig` schedules. `beam_schedule[n]` controls how many generations are requested on attempt *n*, while the paired `temperature_schedule[n]` widens or narrows the sampling distribution to trade determinism for diversity. Each slot uses a distinct seed so the LLM explores different proofs even with identical prompts. Collecting a batch of diverse candidates before compiling raises the odds that at least one proof both passes structural validation and compiles, letting the executor terminate early on success.
-- `ExecutorCache` exposes LRU caches for generation, compilation, and optional validation, exposing hit/miss stats for telemetry.
-- `RetryPolicyExecutor` drives attempts until success or exhaustion, compiling valid candidates via a callback that applies compile caching.
+- The default `beam_schedule` is `[1, 3, 3, 5, 5]`, meaning the first attempt generates 1 candidate, and later retries generate up to 5 candidates. 
+- The default `temperature_schedule` is `[0.3, 0.5, 0.5, 0.7, 0.8]`, which effectively means the LLM starts out more deterministic and gradually becomes more exploratory.
+
 
 ## Dataset lifecycle
 
