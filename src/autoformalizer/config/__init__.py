@@ -14,6 +14,7 @@ import yaml
 from .models import AppSettings, CLISettings, ExecutorSettings, RetrySettings
 
 CONFIG_ENV_VAR = "AUTOFORMALIZER_CONFIG"
+DEFAULTS_PACKAGE = "autoformalizer.config"
 _T = TypeVar("_T")
 
 
@@ -46,7 +47,7 @@ def get_settings(config_path: str | Path | None = None) -> AppSettings:
         with resolved_path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
     else:
-        resource = resources.files(__package__).joinpath("defaults.yaml")
+        resource = resources.files(DEFAULTS_PACKAGE).joinpath("defaults.yaml")
         with resource.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
 
@@ -60,24 +61,30 @@ def get_retry_settings(overrides: dict[str, Any] | None = None) -> RetrySettings
     base = settings.retry.model_dump()
     overrides = overrides or {}
 
-    target_attempts = overrides.get("max_attempts", base["max_attempts"])
+    target_attempts_value = overrides.get("max_attempts")
+    if target_attempts_value is None:
+        target_attempts = int(base["max_attempts"])
+    else:
+        target_attempts = int(target_attempts_value)
     base["max_attempts"] = target_attempts
 
-    if "beam_schedule" in overrides:
-        base["beam_schedule"] = list(overrides["beam_schedule"])
+    beam_schedule_override = overrides.get("beam_schedule")
+    if beam_schedule_override is not None:
+        base["beam_schedule"] = list(beam_schedule_override)
     else:
-        base["beam_schedule"] = _adjust_schedule(base["beam_schedule"], target_attempts)
+        base["beam_schedule"] = _adjust_schedule(list(base["beam_schedule"]), target_attempts)
 
-    if "temperature_schedule" in overrides:
-        base["temperature_schedule"] = list(overrides["temperature_schedule"])
+    temperature_schedule_override = overrides.get("temperature_schedule")
+    if temperature_schedule_override is not None:
+        base["temperature_schedule"] = list(temperature_schedule_override)
     else:
         base["temperature_schedule"] = _adjust_schedule(
-            base["temperature_schedule"],
+            list(base["temperature_schedule"]),
             target_attempts,
         )
 
-    if "max_tokens" in overrides:
-        base["max_tokens"] = overrides["max_tokens"]
+    if "max_tokens" in overrides and overrides["max_tokens"] is not None:
+        base["max_tokens"] = int(overrides["max_tokens"])
 
     return RetrySettings(**base)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
@@ -216,7 +216,7 @@ class RetryPolicyExecutor:
         self,
         item: dict[str, Any],
         config: RetryConfig,
-        compile_fn: callable[[str], tuple[bool, str]],  # (ok, stderr)
+        compile_fn: Callable[[str], tuple[bool, str]],  # (ok, stderr)
     ) -> tuple[list[CandidateRecord], int, float, list[LeanError]]:
         """
         Execute autoformalization with retry policy.

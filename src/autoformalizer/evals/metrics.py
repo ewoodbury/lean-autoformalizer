@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from statistics import median
 
 from ..executor import CandidateRecord
 
@@ -89,6 +88,22 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     return float(lower_val + (upper_val - lower_val) * (index - lower))
 
 
+def _median(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+
+    sorted_vals = sorted(values)
+    length = len(sorted_vals)
+    midpoint = length // 2
+
+    if length % 2 == 1:
+        return float(sorted_vals[midpoint])
+
+    lower = sorted_vals[midpoint - 1]
+    upper = sorted_vals[midpoint]
+    return float((lower + upper) / 2)
+
+
 def compute_metrics(
     item_results: Sequence[ItemEvaluation],
     pass_k: Sequence[int] = (1, 5),
@@ -116,11 +131,11 @@ def compute_metrics(
     compile_rate_at_1 = pass_at_k.get(1, 0.0)
 
     attempts_mean = _mean(attempts_values)
-    attempts_median = float(median(attempts_values)) if attempts_values else 0.0
+    attempts_median = _median(attempts_values)
     attempts_p90 = _percentile(attempts_values, 0.9)
 
     time_mean = _mean(time_values)
-    time_median = float(median(time_values)) if time_values else 0.0
+    time_median = _median(time_values)
     time_p90 = _percentile(time_values, 0.9)
 
     return EvaluationMetrics(

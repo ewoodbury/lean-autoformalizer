@@ -153,7 +153,7 @@ def evaluate(
             max_attempts,
         )
 
-    config_kwargs: dict[str, object] = {
+    config_kwargs: dict[str, Any] = {
         "max_attempts": max_attempts,
         "max_tokens": max_tokens,
         "beam_schedule": beam_schedule,

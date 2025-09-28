@@ -206,10 +206,11 @@ def run_evaluation(
 
     with contextlib.ExitStack() as stack:
         raw_client = model_client_factory()
-        if hasattr(raw_client, "__enter__") and hasattr(raw_client, "__exit__"):
-            model_client = stack.enter_context(raw_client)  # type: ignore[arg-type]
+        model_client: ModelClient
+        if isinstance(raw_client, contextlib.AbstractContextManager):
+            model_client = stack.enter_context(raw_client)
         else:
-            model_client = raw_client  # type: ignore[assignment]
+            model_client = raw_client
 
         executor: AutoformalizationExecutor
         if executor_factory:

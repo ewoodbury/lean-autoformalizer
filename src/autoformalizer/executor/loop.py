@@ -189,16 +189,17 @@ class AutoformalizationExecutor:
             attempt_records = records_by_attempt.get(attempt, [])
             attempt_records_sorted = sorted(attempt_records, key=lambda r: r.beam_index)
 
-            attempt_log = {
+            candidate_entries: list[dict[str, Any]] = []
+            attempt_log: dict[str, Any] = {
                 "attempt": attempt,
                 "beam_size": beam_size,
                 "temperature": temperature,
-                "candidates": [],
+                "candidates": candidate_entries,
             }
 
             for record in attempt_records_sorted:
                 candidate = record.candidate
-                attempt_log["candidates"].append(
+                candidate_entries.append(
                     {
                         "index": record.beam_index,
                         "is_valid": candidate.is_valid,
