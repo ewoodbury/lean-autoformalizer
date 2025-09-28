@@ -2,10 +2,20 @@
 
 from unittest.mock import Mock, patch
 
+from autoformalizer.config import get_retry_settings
 from autoformalizer.decode import CandidateLean
 from autoformalizer.executor.beam import BeamSearchExecutor, RetryConfig, RetryPolicyExecutor
 from autoformalizer.executor.cache import ExecutorCache
 from autoformalizer.executor.errors import ErrorCategory, LeanError
+
+
+DEFAULT_RETRY_SETTINGS = get_retry_settings()
+
+
+def make_retry_config(**overrides) -> RetryConfig:
+    """Helper to construct retry configs from shared settings."""
+
+    return RetryConfig.from_settings(get_retry_settings(overrides))
 
 
 class TestRetryConfig:
@@ -13,12 +23,12 @@ class TestRetryConfig:
 
     def test_default_configuration(self):
         """Test RetryConfig with default values."""
-        config = RetryConfig()
+        config = make_retry_config()
 
-        assert config.max_attempts == 5
-        assert config.beam_schedule == [1, 3, 3, 5, 5]
-        assert config.temperature_schedule == [0.3, 0.5, 0.5, 0.7, 0.8]
-        assert config.max_tokens == 512
+        assert config.max_attempts == DEFAULT_RETRY_SETTINGS.max_attempts
+        assert config.beam_schedule == list(DEFAULT_RETRY_SETTINGS.beam_schedule)
+        assert config.temperature_schedule == list(DEFAULT_RETRY_SETTINGS.temperature_schedule)
+        assert config.max_tokens == DEFAULT_RETRY_SETTINGS.max_tokens
 
     def test_custom_configuration(self):
         """Test RetryConfig with custom values."""
@@ -36,8 +46,18 @@ class TestRetryConfig:
 
     def test_validation_beam_schedule_length_mismatch(self):
         """Test validation fails when beam_schedule length doesn't match max_attempts."""
+        temperature_schedule = RetryConfig.adjust_schedule(
+            DEFAULT_RETRY_SETTINGS.temperature_schedule,
+            3,
+        )
+
         try:
-            RetryConfig(max_attempts=3, beam_schedule=[1, 2])
+            RetryConfig(
+                max_attempts=3,
+                beam_schedule=[1, 2],
+                temperature_schedule=temperature_schedule,
+                max_tokens=DEFAULT_RETRY_SETTINGS.max_tokens,
+            )
             raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "beam_schedule length" in str(e)
@@ -45,7 +65,12 @@ class TestRetryConfig:
     def test_validation_temperature_schedule_length_mismatch(self):
         """Test validation fails when temperature_schedule length doesn't match max_attempts."""
         try:
-            RetryConfig(max_attempts=3, beam_schedule=[1, 2, 3], temperature_schedule=[0.3, 0.5])
+            RetryConfig(
+                max_attempts=3,
+                beam_schedule=[1, 2, 3],
+                temperature_schedule=[0.3, 0.5],
+                max_tokens=DEFAULT_RETRY_SETTINGS.max_tokens,
+            )
             raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "temperature_schedule length" in str(e)
@@ -53,7 +78,12 @@ class TestRetryConfig:
     def test_validation_negative_beam_size(self):
         """Test validation fails with negative beam sizes."""
         try:
-            RetryConfig(max_attempts=2, beam_schedule=[1, -1], temperature_schedule=[0.3, 0.5])
+            RetryConfig(
+                max_attempts=2,
+                beam_schedule=[1, -1],
+                temperature_schedule=[0.3, 0.5],
+                max_tokens=DEFAULT_RETRY_SETTINGS.max_tokens,
+            )
             raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "beam sizes must be positive" in str(e)
@@ -65,6 +95,7 @@ class TestRetryConfig:
                 max_attempts=2,
                 beam_schedule=[1, 2],
                 temperature_schedule=[0.3, 2.5],  # Too high
+                max_tokens=DEFAULT_RETRY_SETTINGS.max_tokens,
             )
             raise AssertionError("Should have raised ValueError")
         except ValueError as e:
@@ -105,7 +136,7 @@ class TestBeamSearchExecutor:
 
         # Test first attempt
         item = {"english": {"statement": "True is true", "steps": ["Use trivial tactic"]}}
-        config = RetryConfig(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.5])
+        config = make_retry_config(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.5])
 
         candidates = executor.generate_candidates(item, 1, config)
 
@@ -130,7 +161,11 @@ class TestBeamSearchExecutor:
         executor = BeamSearchExecutor(model_client, cache)
 
         item = {"english": {"statement": "True is true"}}
-        config = RetryConfig(max_attempts=2, beam_schedule=[1, 2], temperature_schedule=[0.3, 0.7])
+        config = make_retry_config(
+            max_attempts=2,
+            beam_schedule=[1, 2],
+            temperature_schedule=[0.3, 0.7],
+        )
 
         error = LeanError(category=ErrorCategory.TACTIC_FAILED, message="tactic 'sorry' failed")
 
@@ -161,7 +196,7 @@ class TestBeamSearchExecutor:
         )
 
         item = {"english": {"statement": "test"}}
-        config = RetryConfig(max_attempts=1, beam_schedule=[1], temperature_schedule=[0.3])
+        config = make_retry_config(max_attempts=1, beam_schedule=[1], temperature_schedule=[0.3])
 
         # Mock the prompt creation to return predictable result
         with patch.object(executor, "_create_initial_prompt", return_value="test prompt"):
@@ -182,7 +217,7 @@ class TestBeamSearchExecutor:
         executor = BeamSearchExecutor(model_client, cache)
 
         item = {"english": {"statement": "test"}}
-        config = RetryConfig(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.5])
+        config = make_retry_config(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.5])
 
         candidates = executor.generate_candidates(item, 1, config)
 
@@ -257,7 +292,7 @@ class TestRetryPolicyExecutor:
             return True, ""  # Success
 
         item = {"english": {"statement": "True is true"}}
-        config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
+        config = make_retry_config(max_attempts=3, beam_schedule=[3, 5, 7])
 
         candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
@@ -305,7 +340,7 @@ class TestRetryPolicyExecutor:
         beam_executor.error_classifier.get_primary_error.return_value = mock_error
 
         item = {"english": {"statement": "True is true"}}
-        config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
+        config = make_retry_config(max_attempts=3, beam_schedule=[3, 5, 7])
 
         candidate_records, attempt, _, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
@@ -338,7 +373,11 @@ class TestRetryPolicyExecutor:
         beam_executor.error_classifier.get_primary_error.return_value = mock_error
 
         item = {"english": {"statement": "True is true"}}
-        config = RetryConfig(max_attempts=2, beam_schedule=[1, 1], temperature_schedule=[0.3, 0.5])
+        config = make_retry_config(
+            max_attempts=2,
+            beam_schedule=[1, 1],
+            temperature_schedule=[0.3, 0.5],
+        )
 
         candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
@@ -370,7 +409,7 @@ class TestRetryPolicyExecutor:
             return True, ""
 
         item = {"english": {"statement": "True is true"}}
-        config = RetryConfig(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.3])
+        config = make_retry_config(max_attempts=1, beam_schedule=[2], temperature_schedule=[0.3])
 
         candidate_records, attempt, _, _ = retry_executor.execute_with_retries(
             item, config, mock_compile_fn
@@ -437,8 +476,10 @@ class TestBeamSearchIntegration:
             return False, "unknown error"
 
         item = {"english": {"statement": "True is true", "steps": []}}
-        config = RetryConfig(
-            max_attempts=3, beam_schedule=[1, 1, 1], temperature_schedule=[0.3, 0.5, 0.7]
+        config = make_retry_config(
+            max_attempts=3,
+            beam_schedule=[1, 1, 1],
+            temperature_schedule=[0.3, 0.5, 0.7],
         )
 
         candidate_records, attempt, total_time, errors = retry_executor.execute_with_retries(

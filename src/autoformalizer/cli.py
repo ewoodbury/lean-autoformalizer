@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 import typer
 
+from .config import get_cli_settings, get_retry_settings
 from .datasets import DatasetLoader, DatasetValidator
 from .decode import OpenRouterClient, generate_lean_proof
 from .decode.decode import ENGLISH_TO_LEAN_PROMPT
@@ -16,18 +17,23 @@ from .executor import RetryConfig, run_proof
 
 app = typer.Typer(help="Utilities for working with Lean autoformalization experiments.")
 
-# Define option defaults as module-level constants
-DEFAULT_COMPILE_CHECK = True
-DEFAULT_TIMEOUT = 30.0
-DEFAULT_OUTPUT_DIR = "."
-DEFAULT_TRAIN_RATIO = 0.6
-DEFAULT_DEV_RATIO = 0.2
-DEFAULT_TEST_RATIO = 0.2
-DEFAULT_SEED = 42
-DEFAULT_SHOW_ITEMS = 0
-DEFAULT_EVAL_DATASET = Path("datasets/test.jsonl")
-DEFAULT_PASS_K = (1, 5)
-DEFAULT_MAX_ATTEMPTS = RetryConfig().max_attempts
+CLI_SETTINGS = get_cli_settings()
+RETRY_SETTINGS = get_retry_settings()
+
+# Define option defaults sourced from configuration
+DEFAULT_COMPILE_CHECK = CLI_SETTINGS.compile_check
+DEFAULT_TIMEOUT = CLI_SETTINGS.compilation_timeout
+DEFAULT_OUTPUT_DIR = CLI_SETTINGS.output_dir
+DEFAULT_TRAIN_RATIO = CLI_SETTINGS.train_ratio
+DEFAULT_DEV_RATIO = CLI_SETTINGS.dev_ratio
+DEFAULT_TEST_RATIO = CLI_SETTINGS.test_ratio
+DEFAULT_SEED = CLI_SETTINGS.seed
+DEFAULT_SHOW_ITEMS = CLI_SETTINGS.show_items
+DEFAULT_EVAL_DATASET = CLI_SETTINGS.eval_dataset
+DEFAULT_PASS_K = tuple(CLI_SETTINGS.pass_k)
+DEFAULT_MODEL = CLI_SETTINGS.default_model
+DEFAULT_MAX_ATTEMPTS = RETRY_SETTINGS.max_attempts
+DEFAULT_MAX_TOKENS = RETRY_SETTINGS.max_tokens
 
 
 @app.command()
@@ -44,7 +50,7 @@ def evaluate(
     model: Annotated[
         str,
         typer.Option("--model", help="OpenRouter model identifier to use for generation."),
-    ] = "x-ai/grok-4-fast",
+    ] = DEFAULT_MODEL,
     api_key: Annotated[
         str | None,
         typer.Option(
@@ -92,13 +98,16 @@ def evaluate(
             min=64,
             help="Maximum tokens to request from the model for each generation.",
         ),
-    ] = 512,
+    ] = DEFAULT_MAX_TOKENS,
     pass_k: Annotated[
         list[int] | None,
         typer.Option(
             "--k",
-            help="Pass@K thresholds to report (repeat for multiple values).",
-            show_default=True,
+            help=(
+                "Pass@K thresholds to report (repeat for multiple values). "
+                f"Defaults to {DEFAULT_PASS_K}."
+            ),
+            show_default=False,
         ),
     ] = None,
     limit: Annotated[
@@ -121,7 +130,8 @@ def evaluate(
         typer.secho(f"Dataset not found: {dataset}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    pass_k_values = tuple(sorted({int(k) for k in pass_k})) if pass_k else DEFAULT_PASS_K
+    pass_k_input = pass_k if pass_k is not None else list(DEFAULT_PASS_K)
+    pass_k_values = tuple(sorted({int(k) for k in pass_k_input}))
 
     if not pass_k_values:
         typer.secho("At least one --k threshold must be provided.", fg=typer.colors.RED, err=True)
@@ -130,11 +140,25 @@ def evaluate(
         typer.secho("Pass@K thresholds must be positive integers.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    config_kwargs: dict[str, object] = {"max_attempts": max_attempts, "max_tokens": max_tokens}
     if beam:
-        config_kwargs["beam_schedule"] = list(beam)
+        beam_schedule = list(beam)
+    else:
+        beam_schedule = RetryConfig.adjust_schedule(RETRY_SETTINGS.beam_schedule, max_attempts)
+
     if temperature:
-        config_kwargs["temperature_schedule"] = list(temperature)
+        temperature_schedule = list(temperature)
+    else:
+        temperature_schedule = RetryConfig.adjust_schedule(
+            RETRY_SETTINGS.temperature_schedule,
+            max_attempts,
+        )
+
+    config_kwargs: dict[str, object] = {
+        "max_attempts": max_attempts,
+        "max_tokens": max_tokens,
+        "beam_schedule": beam_schedule,
+        "temperature_schedule": temperature_schedule,
+    }
 
     try:
         retry_config = RetryConfig(**config_kwargs)

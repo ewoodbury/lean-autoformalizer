@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..config import get_executor_settings
 from ..decode import CandidateLean, ModelClient
 from .beam import BeamSearchExecutor, CandidateRecord, RetryConfig, RetryPolicyExecutor
 from .cache import ExecutorCache
@@ -71,13 +72,13 @@ class AutoformalizationExecutor:
     def __init__(
         self,
         model_client: ModelClient,
+        default_config: RetryConfig,
         cache: ExecutorCache | None = None,
-        default_config: RetryConfig | None = None,
     ):
         """Initialize the autoformalization executor."""
         self.model_client = model_client
         self.cache = cache or ExecutorCache()
-        self.default_config = default_config or RetryConfig()
+        self.default_config = default_config
 
         # Initialize sub-executors
         self.beam_executor = BeamSearchExecutor(model_client, self.cache)
@@ -230,7 +231,10 @@ class AutoformalizationExecutor:
 
         # Create temporary config for this generation
         config = RetryConfig(
-            max_attempts=1, beam_schedule=[beam_size], temperature_schedule=[temperature]
+            max_attempts=1,
+            beam_schedule=[beam_size],
+            temperature_schedule=[temperature],
+            max_tokens=self.default_config.max_tokens,
         )
 
         candidates = self.beam_executor.generate_candidates(item, 1, config, error_context)
@@ -251,10 +255,9 @@ class AutoformalizationExecutor:
 def autoformalize_item(
     item: dict[str, Any],
     model_client: ModelClient,
-    max_attempts: int = 5,
-    use_cache: bool = True,
-    beam_schedule: list[int] | None = None,
-    **kwargs,
+    *,
+    config: RetryConfig | None = None,
+    use_cache: bool | None = None,
 ) -> AutoformalizationResult:
     """
     Convenience function to autoformalize a single item.
@@ -262,26 +265,19 @@ def autoformalize_item(
     Args:
         item: Dataset item with English proof description
         model_client: LLM client for generation
-        max_attempts: Maximum retry attempts
-        use_cache: Whether to use caching
-        beam_schedule: Beam size schedule for retry attempts
-        **kwargs: Additional RetryConfig parameters
+        config: Retry configuration to use (defaults to packaged settings)
+        use_cache: Override for cache usage (defaults to executor settings)
 
     Returns:
         Autoformalization result
     """
-    cache = ExecutorCache() if use_cache else None
+    resolved_config = config or RetryConfig.default()
+    executor_settings = get_executor_settings()
+    resolved_use_cache = executor_settings.use_cache if use_cache is None else use_cache
+    cache = ExecutorCache() if resolved_use_cache else None
 
-    # Build config with proper beam_schedule
-    config_kwargs = {"max_attempts": max_attempts}
-    if beam_schedule is not None:
-        config_kwargs["beam_schedule"] = beam_schedule
-    config_kwargs.update(kwargs)
-
-    config = RetryConfig(**config_kwargs)
-
-    executor = AutoformalizationExecutor(model_client, cache, config)
-    return executor.autoformalize(item, config)
+    executor = AutoformalizationExecutor(model_client, resolved_config, cache)
+    return executor.autoformalize(item, resolved_config)
 
 
 __all__ = [

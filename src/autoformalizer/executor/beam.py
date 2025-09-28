@@ -4,76 +4,91 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
+from ..config import get_retry_settings
+from ..config.models import RetrySettings
 from ..decode import CandidateLean, ModelClient, generate_lean_proof
 from .cache import ExecutorCache
 from .errors import ErrorClassifier, LeanError, generate_repair_prompt
 
 LOG = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 
 @dataclass(slots=True)
 class RetryConfig:
     """Configuration for retry policy and beam search."""
 
-    max_attempts: int = 5
-    beam_schedule: list[int] = field(default_factory=lambda: [1, 3, 3, 5, 5])
-    temperature_schedule: list[float] = field(default_factory=lambda: [0.3, 0.5, 0.5, 0.7, 0.8])
-    max_tokens: int = 512
+    max_attempts: int
+    beam_schedule: list[int]
+    temperature_schedule: list[float]
+    max_tokens: int
 
     def __post_init__(self) -> None:
-        """Validate and adjust configuration after initialization."""
-        # Auto-adjust schedules if max_attempts is different from default
-        default_beam = [1, 3, 3, 5, 5]
-        default_temp = [0.3, 0.5, 0.5, 0.7, 0.8]
+        """Validate configuration after initialization."""
+
+        self.beam_schedule = list(self.beam_schedule)
+        self.temperature_schedule = list(self.temperature_schedule)
 
         if len(self.beam_schedule) != self.max_attempts:
-            if self.beam_schedule == default_beam:
-                # Use defaults adjusted to max_attempts
-                self.beam_schedule = self._adjust_schedule(default_beam, self.max_attempts)
-            else:
-                msg = (
-                    f"beam_schedule length ({len(self.beam_schedule)}) "
-                    f"must equal max_attempts ({self.max_attempts})"
-                )
-                raise ValueError(msg)
+            msg = (
+                f"beam_schedule length ({len(self.beam_schedule)}) "
+                f"must equal max_attempts ({self.max_attempts})"
+            )
+            raise ValueError(msg)
 
         if len(self.temperature_schedule) != self.max_attempts:
-            if self.temperature_schedule == default_temp:
-                # Use defaults adjusted to max_attempts
-                self.temperature_schedule = self._adjust_schedule(default_temp, self.max_attempts)
-            else:
-                msg = (
-                    f"temperature_schedule length ({len(self.temperature_schedule)}) "
-                    f"must equal max_attempts ({self.max_attempts})"
-                )
-                raise ValueError(msg)
+            msg = (
+                f"temperature_schedule length ({len(self.temperature_schedule)}) "
+                f"must equal max_attempts ({self.max_attempts})"
+            )
+            raise ValueError(msg)
 
-        # Additional validation
         if any(beam <= 0 for beam in self.beam_schedule):
             raise ValueError("All beam sizes must be positive")
 
         if any(temp <= 0 or temp > 2.0 for temp in self.temperature_schedule):
             raise ValueError("All temperatures must be between 0 and 2.0")
 
-    def _adjust_schedule(self, original: list, target_length: int) -> list:
-        """Adjust schedule length to match target_length."""
-        if target_length == len(original):
-            return original[:]
-        elif target_length < len(original):
-            # Truncate
-            return original[:target_length]
-        else:
-            # Extend by repeating the last value
-            return original + [original[-1]] * (target_length - len(original))
+    @classmethod
+    def from_settings(cls, settings: RetrySettings) -> RetryConfig:
+        """Create a retry config from retry settings."""
 
-        if any(beam_size <= 0 for beam_size in self.beam_schedule):
-            raise ValueError("All beam sizes must be positive")
+        return cls(
+            max_attempts=settings.max_attempts,
+            beam_schedule=list(settings.beam_schedule),
+            temperature_schedule=list(settings.temperature_schedule),
+            max_tokens=settings.max_tokens,
+        )
 
-        if any(temp < 0 or temp > 2.0 for temp in self.temperature_schedule):
-            raise ValueError("All temperatures must be between 0 and 2.0")
+    @classmethod
+    def default(cls) -> RetryConfig:
+        """Load the default retry configuration from settings."""
+
+        return cls.from_settings(get_retry_settings())
+
+    @staticmethod
+    def adjust_schedule(values: Sequence[T], target_length: int) -> list[T]:
+        """Adjust a schedule to the desired length."""
+
+        if target_length <= 0:
+            raise ValueError("target_length must be positive")
+
+        sequence = list(values)
+        if not sequence:
+            raise ValueError("Schedule cannot be empty")
+
+        if len(sequence) == target_length:
+            return sequence
+
+        if len(sequence) > target_length:
+            return sequence[:target_length]
+
+        return sequence + [sequence[-1]] * (target_length - len(sequence))
 
 
 @dataclass(slots=True)

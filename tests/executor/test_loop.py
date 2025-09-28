@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from autoformalizer.config import get_retry_settings
 from autoformalizer.decode import CandidateLean
 from autoformalizer.executor.beam import CandidateRecord, RetryConfig
 from autoformalizer.executor.cache import ExecutorCache
@@ -13,6 +14,15 @@ from autoformalizer.executor.loop import (
     AutoformalizationResult,
     autoformalize_item,
 )
+
+
+DEFAULT_RETRY_SETTINGS = get_retry_settings()
+
+
+def make_retry_config(**overrides) -> RetryConfig:
+    """Helper to build retry config objects for tests."""
+
+    return RetryConfig.from_settings(get_retry_settings(overrides))
 
 
 class TestAutoforizationResult:
@@ -93,7 +103,8 @@ class TestAutoforizationExecutor:
     def test_initialization_with_defaults(self):
         """Test executor initialization with default parameters."""
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        default_config = make_retry_config()
+        executor = AutoformalizationExecutor(model_client, default_config)
 
         assert executor.model_client == model_client
         assert isinstance(executor.cache, ExecutorCache)
@@ -105,9 +116,9 @@ class TestAutoforizationExecutor:
         """Test executor initialization with custom parameters."""
         model_client = self.create_mock_model_client()
         cache = ExecutorCache(max_compile_cache=500)
-        config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
+        config = make_retry_config(max_attempts=3, beam_schedule=[3, 5, 7])
 
-        executor = AutoformalizationExecutor(model_client, cache, config)
+        executor = AutoformalizationExecutor(model_client, config, cache)
 
         assert executor.cache == cache
         assert executor.default_config == config
@@ -122,7 +133,7 @@ class TestAutoforizationExecutor:
         mock_compile.return_value = mock_result
 
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         code = "theorem test : True := trivial"
 
@@ -148,7 +159,7 @@ class TestAutoforizationExecutor:
         mock_compile.return_value = mock_result
 
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         code = "theorem bad : True := sorry"
 
@@ -165,7 +176,7 @@ class TestAutoforizationExecutor:
     def test_create_generation_log(self):
         """Test generation log creation from candidates."""
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         candidates = [
             CandidateLean(code="first", is_valid=True, errors=[], generation_time=0.5),
@@ -200,7 +211,11 @@ class TestAutoforizationExecutor:
             ),
         ]
 
-        config = RetryConfig(max_attempts=2, beam_schedule=[1, 2], temperature_schedule=[0.3, 0.7])
+        config = make_retry_config(
+            max_attempts=2,
+            beam_schedule=[1, 2],
+            temperature_schedule=[0.3, 0.7],
+        )
 
         log = executor._create_generation_log(candidate_records, config)
 
@@ -238,7 +253,7 @@ class TestAutoforizationExecutor:
         mock_compile.return_value = (True, "")
 
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         # Mock the retry executor to return successful result immediately
         candidate = CandidateLean(
@@ -276,7 +291,7 @@ class TestAutoforizationExecutor:
         mock_compile.return_value = (False, "compilation error")
 
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         # Mock the retry executor to return failure
         candidate = CandidateLean(
@@ -296,7 +311,7 @@ class TestAutoforizationExecutor:
             mock_retry.return_value = ([candidate_record], 0, 5.0, mock_errors)
 
             item = {"english": {"statement": "Hard theorem"}}
-            config = RetryConfig(max_attempts=3)
+            config = make_retry_config(max_attempts=3)
             result = executor.autoformalize(item, config)
 
         assert not result.success
@@ -314,7 +329,7 @@ class TestAutoforizationExecutor:
         mock_time.side_effect = [0.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         # Mock retry executor to raise exception
         with patch.object(executor.retry_executor, "execute_with_retries") as mock_retry:
@@ -332,7 +347,7 @@ class TestAutoforizationExecutor:
     def test_attempt_single_generation(self):
         """Test single generation attempt method."""
         model_client = self.create_mock_model_client()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         # Mock beam executor
         mock_candidates = [
@@ -367,7 +382,7 @@ class TestAutoforizationExecutor:
         """Test cache statistics retrieval."""
         model_client = self.create_mock_model_client()
         cache = ExecutorCache()
-        executor = AutoformalizationExecutor(model_client, cache)
+        executor = AutoformalizationExecutor(model_client, make_retry_config(), cache)
 
         # Add some cache statistics
         cache.stats.compile_hits = 10
@@ -383,7 +398,7 @@ class TestAutoforizationExecutor:
         """Test cache clearing functionality."""
         model_client = self.create_mock_model_client()
         cache = ExecutorCache()
-        executor = AutoformalizationExecutor(model_client, cache)
+        executor = AutoformalizationExecutor(model_client, make_retry_config(), cache)
 
         # Add some cache entries
         cache.stats.compile_hits = 5
@@ -423,9 +438,10 @@ class TestAutoforalizeItemConvenience:
         mock_executor_class.assert_called_once()
         call_args = mock_executor_class.call_args[0]
         assert call_args[0] == model_client  # model_client
-        assert call_args[1] is not None  # cache should be created
-        config_arg = call_args[2]  # config
-        assert config_arg.max_attempts == 5  # default
+        config_arg = call_args[1]
+        cache_arg = call_args[2]
+        assert config_arg.max_attempts == DEFAULT_RETRY_SETTINGS.max_attempts
+        assert cache_arg is not None  # cache should be created
 
         mock_executor.autoformalize.assert_called_once()
 
@@ -445,12 +461,14 @@ class TestAutoforalizeItemConvenience:
         model_client = Mock()
         item = {"english": {"statement": "Hard theorem"}}
 
-        result = autoformalize_item(item, model_client, max_attempts=3, use_cache=False)
+        custom_config = make_retry_config(max_attempts=3)
+        result = autoformalize_item(item, model_client, config=custom_config, use_cache=False)
 
         # Check configuration
         call_args = mock_executor_class.call_args[0]
-        assert call_args[1] is None  # cache should be None
-        config_arg = call_args[2]
+        config_arg = call_args[1]
+        cache_arg = call_args[2]
+        assert cache_arg is None  # cache should be disabled
         assert config_arg.max_attempts == 3
 
         assert result == mock_result
@@ -506,14 +524,14 @@ class TestExecutorIntegration:
 
         # Setup executor
         model_client = Mock()
-        executor = AutoformalizationExecutor(model_client)
+        executor = AutoformalizationExecutor(model_client, make_retry_config())
 
         item = {
             "id": "test_theorem",
             "english": {"statement": "True is true", "steps": ["Use the trivial tactic"]},
         }
 
-        config = RetryConfig(max_attempts=3, beam_schedule=[3, 5, 7])
+        config = make_retry_config(max_attempts=3, beam_schedule=[3, 5, 7])
         result = executor.autoformalize(item, config)
 
         # Verify successful completion

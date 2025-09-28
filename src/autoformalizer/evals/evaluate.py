@@ -190,7 +190,7 @@ def run_evaluation(
     if not items:
         raise ValueError("Dataset is empty; nothing to evaluate.")
 
-    config = retry_config or RetryConfig()
+    config = retry_config or RetryConfig.default()
     pass_k_sorted: tuple[int, ...] = tuple(sorted(dict.fromkeys(pass_k)))
 
     LOG.info(
@@ -215,7 +215,7 @@ def run_evaluation(
         if executor_factory:
             executor = executor_factory(model_client, config)
         else:
-            executor = AutoformalizationExecutor(model_client, default_config=config)
+            executor = AutoformalizationExecutor(model_client, config)
 
         for index, item in enumerate(items, start=1):
             item_dict = _ensure_model_dict(item)

@@ -9,12 +9,22 @@ This script demonstrates the key capabilities implemented in Phase 3:
 - Main autoformalization execution loop
 """
 
+from autoformalizer.config import get_retry_settings
 from autoformalizer.executor import (
     AutoformalizationExecutor,
     ExecutorCache,
     RetryConfig,
 )
 from autoformalizer.executor.errors import classify_lean_error, generate_repair_prompt
+
+
+DEFAULT_RETRY_SETTINGS = get_retry_settings()
+
+
+def make_retry_config(**overrides) -> RetryConfig:
+    """Helper to create retry configs using shared defaults."""
+
+    return RetryConfig.from_settings(get_retry_settings(overrides))
 
 
 class MockModelClient:
@@ -102,15 +112,17 @@ def demo_retry_configuration():
     print("=" * 50)
 
     # Default configuration
-    default_config = RetryConfig()
+    default_config = make_retry_config()
     print("Default RetryConfig:")
     print(f"  Max attempts: {default_config.max_attempts}")
     print(f"  Beam schedule: {default_config.beam_schedule}")
     print(f"  Temperature schedule: {default_config.temperature_schedule}")
 
     # Custom configuration for faster testing
-    fast_config = RetryConfig(
-        max_attempts=3, beam_schedule=[1, 2, 3], temperature_schedule=[0.3, 0.5, 0.7]
+    fast_config = make_retry_config(
+        max_attempts=3,
+        beam_schedule=[1, 2, 3],
+        temperature_schedule=[0.3, 0.5, 0.7],
     )
     print("\nFast test configuration:")
     print(f"  Max attempts: {fast_config.max_attempts}")
@@ -126,9 +138,13 @@ def demo_main_execution_loop():
     # Setup executor with mock model
     model_client = MockModelClient()
     cache = ExecutorCache()
-    config = RetryConfig(max_attempts=2, beam_schedule=[1, 1], temperature_schedule=[0.3, 0.7])
+    config = make_retry_config(
+        max_attempts=2,
+        beam_schedule=[1, 1],
+        temperature_schedule=[0.3, 0.7],
+    )
 
-    executor = AutoformalizationExecutor(model_client, cache, config)
+    executor = AutoformalizationExecutor(model_client, config, cache)
 
     # Test item
     item = {
