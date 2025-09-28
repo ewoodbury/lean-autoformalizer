@@ -15,7 +15,6 @@ from autoformalizer.executor.loop import (
     autoformalize_item,
 )
 
-
 DEFAULT_RETRY_SETTINGS = get_retry_settings()
 
 

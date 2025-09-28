@@ -8,7 +8,6 @@ from autoformalizer.executor.beam import BeamSearchExecutor, RetryConfig, RetryP
 from autoformalizer.executor.cache import ExecutorCache
 from autoformalizer.executor.errors import ErrorCategory, LeanError
 
-
 DEFAULT_RETRY_SETTINGS = get_retry_settings()
 
 
