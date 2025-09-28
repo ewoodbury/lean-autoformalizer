@@ -26,7 +26,7 @@ DEFAULT_TEST_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_SHOW_ITEMS = 0
 DEFAULT_EVAL_DATASET = Path("datasets/test.jsonl")
-DEFAULT_PASS_K = (1, 5, 20)
+DEFAULT_PASS_K = (1, 5)
 DEFAULT_MAX_ATTEMPTS = RetryConfig().max_attempts
 
 
@@ -494,9 +494,7 @@ def decode(
         typer.Option(
             "--step",
             "-s",
-            prompt=(
-                "Proof steps (optional, separate multiple entries with ';'). Leave blank to skip"
-            ),
+            prompt=("Proof steps (optional, separate entries with ';')"),
             help="Optional semicolon-separated proof steps to guide the model.",
             show_default=False,
         ),

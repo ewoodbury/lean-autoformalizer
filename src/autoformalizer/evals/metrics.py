@@ -91,7 +91,7 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
 
 def compute_metrics(
     item_results: Sequence[ItemEvaluation],
-    pass_k: Sequence[int] = (1, 5, 20),
+    pass_k: Sequence[int] = (1, 5),
 ) -> EvaluationMetrics:
     """Compute aggregate evaluation metrics from per-item results."""
 

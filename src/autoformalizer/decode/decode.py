@@ -53,6 +53,13 @@ _ALLOWED_UNICODE_CODEPOINTS = [
     "220F",  # U+220F product operator
     "22A4",  # U+22A4 top
     "22A5",  # U+22A5 bottom
+    "2229",  # U+2229 set intersection
+    "222A",  # U+222A set union
+    "2223",  # U+2223 divides
+    "2081",  # U+2081 subscript one
+    "2082",  # U+2082 subscript two
+    "27E8",  # U+27E8 left angle bracket
+    "27E9",  # U+27E9 right angle bracket
 ]
 
 ALLOWED_UNICODE_CHARS = {chr(int(codepoint, 16)) for codepoint in _ALLOWED_UNICODE_CODEPOINTS}

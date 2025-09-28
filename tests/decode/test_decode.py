@@ -5,6 +5,7 @@ Tests cover validation, code extraction, proof generation, and batch processing
 to ensure correctness and robustness for CI/CD pipeline.
 """
 
+import textwrap
 import time
 
 import pytest
@@ -110,6 +111,49 @@ class TestValidateLeanCode:
             "  intro h\n"
             "  simpa using h"
         )
+
+        is_valid, errors = validate_lean_code(unicode_code)
+        assert is_valid
+        assert not errors
+
+    def test_allows_unicode_angle_brackets(self):
+        """Lean existential witnesses use angle brackets which should be accepted."""
+        unicode_code = (
+            "theorem unicode_exists (a : Nat) : ∃ x : Nat, x = a := by\n  refine ⟨a, ?_⟩\n  rfl"
+        )
+
+        is_valid, errors = validate_lean_code(unicode_code)
+        assert is_valid
+        assert not errors
+
+    def test_allows_set_unicode_symbols(self):
+        """Set-theoretic unicode symbols from datasets should be accepted."""
+        inter = chr(0x2229)
+        union = chr(0x222A)
+        divides = chr(0x2223)
+
+        unicode_code = textwrap.dedent(
+            f"""
+            open Set
+
+            theorem unicode_set (A B C : Set Nat) :
+                (A {inter} B) {union} C = C {union} (A {inter} B) := by
+              ext x
+              constructor <;> intro hx <;>
+                simpa [mem_union, mem_inter, And.left_comm, And.comm] using hx
+
+            theorem unicode_divides {{a b : Nat}} (h : a {divides} b) :
+                a {divides} b := h
+            """
+        ).strip()
+
+        is_valid, errors = validate_lean_code(unicode_code)
+        assert is_valid
+        assert not errors
+
+    def test_allows_unicode_subscripts(self):
+        """Variable names with unicode subscripts should be accepted."""
+        unicode_code = "theorem unicode_subscript (x₁ x₂ : Nat) : x₁ = x₁ := by\n  rfl"
 
         is_valid, errors = validate_lean_code(unicode_code)
         assert is_valid

@@ -111,7 +111,7 @@ test-coverage: ## Run tests with coverage report
 	@uv run pytest $(TESTS_DIR) --cov=$(PYTHON_SRC) --cov-report=html --cov-report=term
 	@echo "$(GREEN)✓ Coverage report generated$(RESET)"
 
-test-metrics: ## Run tests then evaluation metrics (requires OPENROUTER_API_KEY)
+test-eval: ## Run evals for buillding new proofs (requires OPENROUTER_API_KEY)
 	@echo "$(CYAN)Running evaluation metrics...$(RESET)"
 	@[ -n "$$OPENROUTER_API_KEY" ] || (echo "$(RED)OPENROUTER_API_KEY must be set to run evaluation$(RESET)" && exit 1)
 	@uv run autoformalize evaluate

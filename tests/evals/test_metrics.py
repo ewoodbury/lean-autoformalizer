@@ -31,14 +31,13 @@ def test_compute_metrics_basic():
         make_item("c", False, None, None, 5, 6.0),
     ]
 
-    metrics = compute_metrics(items, pass_k=(1, 5, 20))
+    metrics = compute_metrics(items, pass_k=(1, 5))
 
     assert metrics.total_items == 3
     assert metrics.success_count == 2
     assert metrics.success_rate == 2 / 3
     assert metrics.pass_at_k[1] == 1 / 3  # only first item succeeds within 1 candidate
     assert metrics.pass_at_k[5] == 2 / 3  # second item succeeds within 5 candidates
-    assert metrics.pass_at_k[20] == 2 / 3
     assert metrics.compile_rate_at_1 == metrics.pass_at_k[1]
 
     # Attempts statistics

@@ -165,12 +165,16 @@ def _summarize_config(config: RetryConfig) -> dict[str, object]:
     }
 
 
+def _format_pass_summary(pass_flags: dict[int, bool], pass_k: Sequence[int]) -> str:
+    return " ".join(f"@{k}:{'Y' if pass_flags.get(k) else 'N'}" for k in pass_k)
+
+
 def run_evaluation(
     dataset_path: Path | str,
     model_client_factory: ModelClientFactory,
     *,
     retry_config: RetryConfig | None = None,
-    pass_k: Sequence[int] = (1, 5, 20),
+    pass_k: Sequence[int] = (1, 5),
     limit: int | None = None,
     executor_factory: ExecutorFactory | None = None,
 ) -> EvaluationReport:
@@ -198,6 +202,7 @@ def run_evaluation(
 
     item_evaluations: list[ItemEvaluation] = []
     item_reports: list[ItemReport] = []
+    total_items = len(items)
 
     with contextlib.ExitStack() as stack:
         raw_client = model_client_factory()
@@ -219,6 +224,16 @@ def run_evaluation(
             item_eval, item_report = _build_item_evaluation(item, result, pass_k_sorted)
             item_evaluations.append(item_eval)
             item_reports.append(item_report)
+
+            progress_line = (
+                f"[{index}/{total_items}] {item_report.item_id} "
+                f"success={'Y' if item_report.success else 'N'} "
+                f"attempts={item_report.attempts} "
+                f"rank={item_report.success_rank if item_report.success_rank is not None else '-'} "
+                f"time={item_report.total_time:.2f}s "
+                f"pass[{_format_pass_summary(item_report.pass_at_k, pass_k_sorted)}]"
+            )
+            print(progress_line, flush=True)
 
             LOG.info(
                 "Evaluated item %d/%d (%s): success=%s, attempts=%d, success_rank=%s",
