@@ -1,6 +1,45 @@
 # lean-autoformalizer
 
-Minimal autoformalization pipeline of simple math proofs from English into Lean 4 (with Mathlib). 
+Autoformalization pipeline of simple math proofs from English into Lean 4 (with Mathlib) via LLM.
+
+## Demo
+
+Here's a quick demo of the autoformalizer in interactive mode:
+- Set your OpenRouter key: `export OPENROUTER_API_KEY=sk-or-...`
+- Run the interactive decoder: `make decode` or `uv run autoformalize decode`
+- Enter a mathematical statement with proof steps to see the AI reasoning process
+- (Optional) Specify proof steps separated by semicolons to guide the model
+
+**Example 1: Simple application of a known theorem**
+```
+make decode
+Starting interactive decoder...
+Statement: For all natural numbers a, b, and c, a * (b + c) = a * b + a * c.
+Proof steps: First apply distributivity of multiplication over addition; Then simplify using basic arithmetic properties
+
+=== Lean Candidate ===
+import Mathlib.Algebra.Ring.Basic
+
+theorem distributivity_demo (a b c : ℕ) : a * (b + c) = a * b + a * c := by
+  rw [Nat.mul_add]
+
+Validation: Success! (4.2s)
+```
+
+**Example 2: Propositional logic with case analysis**
+```
+make decode
+Statement: For propositions P, Q, and R, if P ∨ Q holds and each disjunct implies R, then R holds.
+Proof steps: We perform case analysis on the disjunction P ∨ Q.” “If P holds we apply the implication from P to R, otherwise we apply the implication from Q to R.
+
+=== Lean Candidate ===
+theorem disjunction_elimination (P Q R : Prop) (h1 : P ∨ Q) (h2 : P → R) (h3 : Q → R) : R := by
+  cases h1 with
+  | inl hp => exact h2 hp
+  | inr hq => exact h3 hq
+
+Validation: Success! (10.54s)
+```
 
 ## Prerequisites
 - [Lean 4 toolchain](https://leanprover-community.github.io/get_started.html) (Lake 5+, compatible with `leanprover/lean4:v4.18.0`).
