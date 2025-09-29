@@ -2,7 +2,7 @@
 
 Convert natural language math theorems into verifiable Lean 4 proofs using a LLM.
 
-If you want to read more, I wrote a long-form blog post on this project [here](https://ewoodbury.com/posts/2025-09-27_lean_autoformalizer/).
+I wrote a long-form blog post on this project [here](https://ewoodbury.com/posts/2025-09-27_lean_autoformalizer/).
 
 ## Results
 
@@ -75,14 +75,14 @@ Per-item outcomes:
 ## CLI Demo
 
 Here's a demo of the autoformalizer in interactive mode:
-- Set your OpenRouter key: `export OPENROUTER_API_KEY=sk-or-...`
+- Set an OpenRouter key: `export OPENROUTER_API_KEY=sk-or-...`
 - Run the interactive decoder: `make decode` or `uv run autoformalize decode`
 - Enter a mathematical statement with proof steps to see the AI reasoning process
 - (Optional) Specify proof steps separated by semicolons to guide the model
 
 **Example 1: Simple application of a known theorem**
 ```
-make decode
+$ make decode
 Starting interactive decoder...
 Statement: For all natural numbers a, b, and c, a * (b + c) = a * b + a * c.
 Proof steps: First apply distributivity of multiplication over addition; Then simplify using basic arithmetic properties
@@ -132,25 +132,11 @@ The helper script runs `lake build Autoformalizer.Basic` followed by `lake build
 # Create a local virtualenv at .venv and install runtime+dev deps
 ./scripts/bootstrap_python.sh
 ```
-After the sync you can invoke tooling with `uv run`:
+After the sync, invoke tooling with `uv run`:
 ```bash
 uv run --python 3.11 --group dev ruff check
 uv run --python 3.11 pytest
 ```
-
-### Executor check
-```bash
-uv run python - <<'PY'
-from autoformalizer.executor import run_proof
-
-snippet = """
-    theorem tmp (a b : Nat) : a + b = b + a := by
-      simpa using Nat.add_comm a b
-"""
-print(run_proof(snippet))
-PY
-```
-The call returns `(True, "")` when Lean accepts the generated snippet. Failures return `False` and emit compiler stderr for downstream prompt repair.
 
 ### CLI entrypoint
 ```bash
@@ -160,7 +146,7 @@ This wraps `run_proof` so Phase 0 can be driven from the command line.
 
 #### Talking to an LLM (OpenRouter)
 
-Set your OpenRouter key in the environment and invoke the new `decode` command to translate
+Set an OpenRouter key in the environment and invoke the new `decode` command to translate
 English statements into Lean code through `x-ai/grok-4-fast`:
 
 ```bash
@@ -178,20 +164,17 @@ uv run autoformalize decode
 make decode
 ```
 
-Flags you may find useful:
-
-- `--model`: override the OpenRouter model (defaults to `x-ai/grok-4-fast`).
-- `--max-tokens` / `--temperature`: control sampling parameters.
-- `--show-prompt`: print the exact prompt sent to the model.
-- `--output`: save the generated Lean snippet to a file.
-- `--step`: optionally provide one or more proof hints (separate multiple steps with `;`).
-
-The command validates the returned code with lightweight structural checks before printing the
-result, so you immediately learn whether the snippet is syntactically plausible.
-
-### Linting & formatting
-`ruff` is configured as the single source of truth for linting and formatting. Use:
+### Linting, formatting, and type checking
+`ruff` is configured for linting and formatting. `pyrefly` is configured for python type checking.
 ```bash
-make lint
-make format
+# autofix lint/formatting
+make fix-lint
+
+# check
+make test-lint
+make test-format
+make test-type-check
+
+# or, run all static checks:
+make test-static-python
 ```
